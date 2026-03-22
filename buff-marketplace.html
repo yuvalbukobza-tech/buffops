@@ -8918,7 +8918,10 @@ function FinanceRequests({
           senderName: displayName,
           senderEmail
         });
-        fetch(SCRIPT_URL + "?" + sparams.toString()).catch(() => {});
+        fetch(SCRIPT_URL + "?" + sparams.toString()).then(() => {
+          setToast("Email sent successfully!");
+          setTimeout(() => setToast(""), 3000);
+        }).catch(() => {});
       }
     },
     style: {
