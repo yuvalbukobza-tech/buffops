@@ -7282,7 +7282,8 @@ function VendorOrders({
   setOrders,
   transactions,
   setTransactions,
-  displayName
+  displayName,
+  isAdmin
 }) {
   const today = new Date().toISOString().slice(0, 10);
   const _vod = () => {
@@ -7506,7 +7507,25 @@ function VendorOrders({
         cursor: "pointer",
         fontFamily: "inherit"
       }
-    }, "\u2193 Download CSV")), /*#__PURE__*/React.createElement("div", {
+    }, "\u2193 Download CSV"), isAdmin && /*#__PURE__*/React.createElement("button", {
+      onClick: () => {
+        if (window.confirm("Delete this order?")) {
+          setOrders(p => p.filter(x => x.id !== o.id));
+          setViewOrder(null);
+        }
+      },
+      style: {
+        background: "rgba(239,68,68,0.1)",
+        border: "1px solid rgba(239,68,68,0.3)",
+        color: "#f87171",
+        borderRadius: 8,
+        padding: "8px 16px",
+        fontSize: 12,
+        fontWeight: 700,
+        cursor: "pointer",
+        fontFamily: "inherit"
+      }
+    }, "\uD83D\uDDD1 Delete")), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 12,
         color: "#555",
@@ -8182,7 +8201,10 @@ function VendorOrders({
     value: "delivered"
   }, "Delivered"))), /*#__PURE__*/React.createElement("td", {
     style: {
-      padding: "11px 16px"
+      padding: "11px 16px",
+      display: "flex",
+      gap: 6,
+      alignItems: "center"
     }
   }, /*#__PURE__*/React.createElement("button", {
     onClick: () => setViewOrder(o),
@@ -8197,7 +8219,22 @@ function VendorOrders({
       fontFamily: "inherit",
       fontWeight: 700
     }
-  }, "View"))))))));
+  }, "View"), isAdmin && /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      if (window.confirm("Delete this order?")) setOrders(p => p.filter(x => x.id !== o.id));
+    },
+    style: {
+      background: "rgba(239,68,68,0.08)",
+      border: "1px solid rgba(239,68,68,0.25)",
+      color: "#f87171",
+      borderRadius: 6,
+      padding: "5px 10px",
+      fontSize: 11,
+      cursor: "pointer",
+      fontFamily: "inherit",
+      fontWeight: 700
+    }
+  }, "\uD83D\uDDD1"))))))));
 }
 
 // ── FINANCE REQUESTS ───────────────────────────────────────────────────────────
@@ -8207,7 +8244,8 @@ function FinanceRequests({
   appUsers,
   transactions,
   setTransactions,
-  displayName
+  displayName,
+  isAdmin
 }) {
   const today = new Date().toISOString().slice(0, 10);
   const DEPTS = ["productDesktop", "productMobile", "marketing", "buffPay"];
@@ -8234,6 +8272,7 @@ function FinanceRequests({
   const [emailRecips, setEmailRecips] = useState({});
   const [emailStatus, setEmailStatus] = useState("idle");
   const [toast, setToast] = useState("");
+  const [editTx, setEditTx] = useState(null);
   const plannedByVendor = useMemo(() => {
     const m = {};
     Object.values(allocs || {}).forEach(cr => cr.forEach(alloc => {
@@ -8830,7 +8869,51 @@ function FinanceRequests({
       fontSize: 12,
       color: "#555"
     }
-  }, detailTx.vendor, " \xB7 ", detailTx.dateRequested, " \xB7 by ", detailTx.enteredBy || "—")), /*#__PURE__*/React.createElement("button", {
+  }, detailTx.vendor, " \xB7 ", detailTx.dateRequested, " \xB7 by ", detailTx.enteredBy || "—")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      alignItems: "center",
+      marginLeft: 12,
+      flexShrink: 0
+    }
+  }, isAdmin && /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      setEditTx({
+        ...detailTx
+      });
+      setDetailTx(null);
+    },
+    style: {
+      background: "rgba(200,255,0,0.08)",
+      border: "1px solid rgba(200,255,0,0.25)",
+      color: G,
+      borderRadius: 8,
+      padding: "6px 12px",
+      fontSize: 12,
+      cursor: "pointer",
+      fontFamily: "inherit",
+      fontWeight: 700
+    }
+  }, "\u270F Edit"), isAdmin && /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      if (window.confirm("Delete this request?")) {
+        setTransactions(p => p.filter(t => t.id !== detailTx.id));
+        setDetailTx(null);
+      }
+    },
+    style: {
+      background: "rgba(239,68,68,0.08)",
+      border: "1px solid rgba(239,68,68,0.25)",
+      color: "#f87171",
+      borderRadius: 8,
+      padding: "6px 12px",
+      fontSize: 12,
+      cursor: "pointer",
+      fontFamily: "inherit",
+      fontWeight: 700
+    }
+  }, "\uD83D\uDDD1 Delete"), /*#__PURE__*/React.createElement("button", {
     onClick: () => setDetailTx(null),
     style: {
       background: "none",
@@ -8841,11 +8924,9 @@ function FinanceRequests({
       fontSize: 13,
       cursor: "pointer",
       fontFamily: "inherit",
-      fontWeight: 700,
-      marginLeft: 12,
-      flexShrink: 0
+      fontWeight: 700
     }
-  }, "\u2715")), /*#__PURE__*/React.createElement("div", {
+  }, "\u2715"))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 12,
@@ -9069,7 +9150,277 @@ function FinanceRequests({
         fontWeight: 600
       }
     }, "Copy Email Text"));
-  })())), emailPanel && emailTx && /*#__PURE__*/React.createElement("div", {
+  })())), editTx && /*#__PURE__*/React.createElement("div", {
+    onClick: () => setEditTx(null),
+    style: {
+      position: "fixed",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      background: "rgba(0,0,0,0.8)",
+      zIndex: 2500,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    onClick: e => e.stopPropagation(),
+    style: {
+      background: "#0d0d0d",
+      border: "1px solid #1a1a1a",
+      borderRadius: 16,
+      padding: 28,
+      width: "100%",
+      maxWidth: 520,
+      maxHeight: "90vh",
+      overflowY: "auto"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 20
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 16,
+      fontWeight: 900,
+      color: "#f1f5f9"
+    }
+  }, "Edit Request #", editTx.id), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setEditTx(null),
+    style: {
+      background: "none",
+      border: "1px solid #2a2a2a",
+      color: "#555",
+      borderRadius: 8,
+      padding: "5px 10px",
+      fontSize: 13,
+      cursor: "pointer",
+      fontFamily: "inherit",
+      fontWeight: 700
+    }
+  }, "\u2715")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 700,
+      color: "#555",
+      textTransform: "uppercase",
+      letterSpacing: "0.07em",
+      marginBottom: 6
+    }
+  }, "Vendor"), /*#__PURE__*/React.createElement("input", {
+    value: editTx.vendor,
+    onChange: e => setEditTx(p => ({
+      ...p,
+      vendor: e.target.value
+    })),
+    style: {
+      width: "100%",
+      background: "#111",
+      border: "1px solid #2a2a2a",
+      borderRadius: 8,
+      color: "#f1f5f9",
+      fontSize: 13,
+      padding: "9px 12px",
+      fontFamily: "inherit",
+      outline: "none"
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 700,
+      color: "#555",
+      textTransform: "uppercase",
+      letterSpacing: "0.07em",
+      marginBottom: 6
+    }
+  }, "Date"), /*#__PURE__*/React.createElement("input", {
+    type: "date",
+    value: editTx.dateRequested,
+    onChange: e => setEditTx(p => ({
+      ...p,
+      dateRequested: e.target.value
+    })),
+    style: {
+      width: "100%",
+      background: "#111",
+      border: "1px solid #2a2a2a",
+      borderRadius: 8,
+      color: "#f1f5f9",
+      fontSize: 13,
+      padding: "9px 12px",
+      fontFamily: "inherit",
+      outline: "none"
+    }
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 700,
+      color: "#555",
+      textTransform: "uppercase",
+      letterSpacing: "0.07em",
+      marginBottom: 6
+    }
+  }, "Status"), /*#__PURE__*/React.createElement("select", {
+    value: editTx.status,
+    onChange: e => setEditTx(p => ({
+      ...p,
+      status: e.target.value
+    })),
+    style: {
+      width: "100%",
+      background: "#111",
+      border: "1px solid #2a2a2a",
+      borderRadius: 8,
+      color: statusColor(editTx.status),
+      fontSize: 13,
+      padding: "9px 12px",
+      fontFamily: "inherit",
+      outline: "none",
+      fontWeight: 700,
+      cursor: "pointer"
+    }
+  }, /*#__PURE__*/React.createElement("option", {
+    value: "pending"
+  }, "Pending"), /*#__PURE__*/React.createElement("option", {
+    value: "delivered"
+  }, "Delivered"))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 700,
+      color: "#555",
+      textTransform: "uppercase",
+      letterSpacing: "0.07em",
+      marginBottom: 10
+    }
+  }, "Department Amounts"), DEPTS.map(d => /*#__PURE__*/React.createElement("div", {
+    key: d,
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      marginBottom: 8
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: "#f1f5f9",
+      fontWeight: 600,
+      width: 140,
+      flexShrink: 0
+    }
+  }, DEPT_LABELS[d]), /*#__PURE__*/React.createElement("input", {
+    type: "number",
+    min: "0",
+    placeholder: "0",
+    value: editTx[d] || "",
+    onChange: e => setEditTx(p => ({
+      ...p,
+      [d]: e.target.value
+    })),
+    style: {
+      flex: 1,
+      background: "#111",
+      border: "1px solid #2a2a2a",
+      borderRadius: 8,
+      color: G,
+      fontSize: 13,
+      padding: "7px 10px",
+      fontFamily: "inherit",
+      outline: "none",
+      textAlign: "right"
+    }
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "flex-end",
+      marginTop: 8,
+      fontSize: 13,
+      fontWeight: 800,
+      color: G
+    }
+  }, "Total: ", usd(DEPTS.reduce((s, d) => s + (parseFloat(editTx[d]) || 0), 0)))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 20
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      fontWeight: 700,
+      color: "#555",
+      textTransform: "uppercase",
+      letterSpacing: "0.07em",
+      marginBottom: 6
+    }
+  }, "Note"), /*#__PURE__*/React.createElement("textarea", {
+    value: editTx.note || "",
+    onChange: e => setEditTx(p => ({
+      ...p,
+      note: e.target.value
+    })),
+    rows: 3,
+    style: {
+      width: "100%",
+      background: "#111",
+      border: "1px solid #2a2a2a",
+      borderRadius: 8,
+      color: "#888",
+      fontSize: 13,
+      padding: "9px 12px",
+      fontFamily: "inherit",
+      outline: "none",
+      resize: "vertical"
+    }
+  })), /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      const total = DEPTS.reduce((s, d) => s + (parseFloat(editTx[d]) || 0), 0);
+      const split = DEPTS.filter(d => parseFloat(editTx[d]) > 0).map(d => DEPT_LABELS[d] + ": " + usd(parseFloat(editTx[d]))).join(" / ");
+      const updated = {
+        ...editTx,
+        totalAmount: total,
+        departmentsSplit: split
+      };
+      Object.keys(updated).forEach(k => {
+        if (DEPTS.includes(k)) updated[k] = parseFloat(updated[k]) || 0;
+      });
+      setTransactions(p => p.map(t => t.id === updated.id ? updated : t));
+      setEditTx(null);
+      setToast("Request updated!");
+      setTimeout(() => setToast(""), 3000);
+    },
+    style: {
+      width: "100%",
+      background: G,
+      color: "#0a0a0a",
+      border: "none",
+      borderRadius: 8,
+      padding: "12px",
+      fontSize: 13,
+      fontWeight: 800,
+      cursor: "pointer",
+      fontFamily: "inherit"
+    }
+  }, "Save Changes"))), emailPanel && emailTx && /*#__PURE__*/React.createElement("div", {
     onClick: () => setEmailPanel(false),
     style: {
       position: "fixed",
@@ -9635,6 +9986,7 @@ function BudgetTab({
   setTransactions,
   displayName,
   appUsers,
+  isAdmin,
   analyticsRows,
   analyticsFrom,
   analyticsTo,
@@ -9695,14 +10047,16 @@ function BudgetTab({
     setOrders: setOrders,
     transactions: transactions,
     setTransactions: setTransactions,
-    displayName: displayName
+    displayName: displayName,
+    isAdmin: isAdmin
   }), sub === "finance" && /*#__PURE__*/React.createElement(FinanceRequests, {
     products: products,
     allocs: allocs,
     appUsers: appUsers,
     transactions: transactions,
     setTransactions: setTransactions,
-    displayName: displayName
+    displayName: displayName,
+    isAdmin: isAdmin
   }));
 }
 
@@ -10298,6 +10652,7 @@ function App() {
     setTransactions: setTransactions,
     displayName: displayName,
     appUsers: appUsers,
+    isAdmin: isAdmin,
     analyticsRows: analyticsRows,
     analyticsFrom: analyticsFrom,
     analyticsTo: analyticsTo,
