@@ -1128,7 +1128,7 @@ function ProductForm({
   }, CURRENCIES.map(c => /*#__PURE__*/React.createElement("option", {
     key: c
   }, c)))), /*#__PURE__*/React.createElement(Field, {
-    label: "Provider"
+    label: "Vendor"
   }, /*#__PURE__*/React.createElement(Select, {
     value: f.provider,
     onChange: e => set("provider", e.target.value)
@@ -1870,9 +1870,7 @@ function OverviewTab({
 
 function ProductsTab({
   products,
-  setProducts,
-  allocs,
-  setTab
+  setProducts
 }) {
   const [modal, setModal] = useState(null);
   const [filterCat, setFilterCat] = useState("All");
@@ -1885,43 +1883,6 @@ function ProductsTab({
     if (filterDemand !== "All" && p.demandLevel !== filterDemand) return false;
     return true;
   });
-
-  // Countries allocated per product
-  function getCountries(pid) {
-    return COUNTRIES.filter(c => (allocs[c] || []).some(r => r.productId === pid));
-  }
-
-  // Bar chart: monthly real budget by brand
-  const brandBudgets = useMemo(() => {
-    const map = {};
-    products.forEach(p => {
-      const total = COUNTRIES.reduce((s, c) => {
-        return s + (allocs[c] || []).filter(r => r.productId === p.id).reduce((ss, r) => ss + calcRealDaily(p, r) * 30.5, 0);
-      }, 0);
-      map[p.brand] = (map[p.brand] || 0) + total;
-    });
-    return Object.entries(map).map(([brand, budget]) => ({
-      brand,
-      budget
-    })).sort((a, b) => b.budget - a.budget).slice(0, 10);
-  }, [products, allocs]);
-  const maxBudget = brandBudgets.length ? brandBudgets[0].budget : 1;
-
-  // Category distribution
-  const catCounts = useMemo(() => {
-    const map = {};
-    products.forEach(p => {
-      map[p.category] = (map[p.category] || 0) + 1;
-    });
-    return Object.entries(map).sort((a, b) => b[1] - a[1]);
-  }, [products]);
-  const catColors = {
-    Gaming: "#4ade80",
-    Shopping: "#a78bfa",
-    Entertainment: "#fb923c",
-    Charity: "#86efac",
-    Other: "#555"
-  };
   function save(form) {
     const parsed = {
       ...form,
@@ -1946,192 +1907,7 @@ function ProductsTab({
       whiteSpace: "nowrap"
     }
   }, s);
-  return /*#__PURE__*/React.createElement("div", null, products.length > 0 && /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "grid",
-      gridTemplateColumns: "1fr 280px",
-      gap: 16,
-      marginBottom: 20
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      background: "#0d0d0d",
-      border: "1px solid #1a1a1a",
-      borderRadius: 14,
-      padding: "24px 28px"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 13,
-      fontWeight: 800,
-      color: "#f1f5f9",
-      marginBottom: 6,
-      letterSpacing: "-0.02em"
-    }
-  }, "Monthly Budget by Brand"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11,
-      color: "#444",
-      marginBottom: 20
-    }
-  }, "Real estimated spend per brand across all countries"), brandBudgets.length === 0 ? /*#__PURE__*/React.createElement("div", {
-    style: {
-      color: "#333",
-      fontSize: 12
-    }
-  }, "No allocations yet") : /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      flexDirection: "column",
-      gap: 10
-    }
-  }, brandBudgets.map(({
-    brand,
-    budget
-  }) => /*#__PURE__*/React.createElement("div", {
-    key: brand,
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 12
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: 80,
-      fontSize: 12,
-      fontWeight: 700,
-      color: "#888",
-      textAlign: "right",
-      flexShrink: 0,
-      overflow: "hidden",
-      textOverflow: "ellipsis",
-      whiteSpace: "nowrap"
-    }
-  }, brand), /*#__PURE__*/React.createElement("div", {
-    style: {
-      flex: 1,
-      height: 8,
-      background: "#1a1a1a",
-      borderRadius: 4,
-      overflow: "hidden"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: `${budget / maxBudget * 100}%`,
-      height: "100%",
-      background: "#c8ff00",
-      borderRadius: 4
-    }
-  })), /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: 72,
-      fontSize: 12,
-      fontWeight: 700,
-      color: "#f1f5f9",
-      flexShrink: 0
-    }
-  }, usd(budget), "/mo"))))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      background: "#0d0d0d",
-      border: "1px solid #1a1a1a",
-      borderRadius: 14,
-      padding: "24px 28px"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 13,
-      fontWeight: 800,
-      color: "#f1f5f9",
-      marginBottom: 6,
-      letterSpacing: "-0.02em"
-    }
-  }, "By Category"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11,
-      color: "#444",
-      marginBottom: 20
-    }
-  }, "Product count per category"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      flexDirection: "column",
-      gap: 8
-    }
-  }, catCounts.map(([cat, count]) => /*#__PURE__*/React.createElement("div", {
-    key: cat,
-    style: {
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 8
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: 8,
-      height: 8,
-      borderRadius: "50%",
-      background: catColors[cat] || "#555",
-      flexShrink: 0
-    }
-  }), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 12,
-      color: "#888"
-    }
-  }, cat)), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 8
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: 80,
-      height: 5,
-      background: "#1a1a1a",
-      borderRadius: 3,
-      overflow: "hidden"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: `${count / products.length * 100}%`,
-      height: "100%",
-      background: catColors[cat] || "#555",
-      borderRadius: 3
-    }
-  })), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 12,
-      fontWeight: 700,
-      color: "#f1f5f9",
-      width: 20,
-      textAlign: "right"
-    }
-  }, count))))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      borderTop: "1px solid #1a1a1a",
-      marginTop: 16,
-      paddingTop: 12,
-      display: "flex",
-      justifyContent: "space-between"
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 11,
-      color: "#444"
-    }
-  }, "Total products"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 13,
-      fontWeight: 800,
-      color: "#c8ff00"
-    }
-  }, products.length)))), /*#__PURE__*/React.createElement("div", {
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 16,
@@ -2221,46 +1997,25 @@ function ProductsTab({
       borderRadius: 14,
       overflow: "hidden"
     }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      padding: "14px 20px",
-      borderBottom: "1px solid #1a1a1a",
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center"
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 14,
-      fontWeight: 800,
-      color: "#f1f5f9",
-      letterSpacing: "-0.02em"
-    }
-  }, "Product Catalogue"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: 12,
-      color: "#444"
-    }
-  }, filtered.length, " product", filtered.length !== 1 ? "s" : "")), /*#__PURE__*/React.createElement("table", {
+  }, /*#__PURE__*/React.createElement("table", {
     style: {
       width: "100%",
       borderCollapse: "collapse",
-      fontSize: 13
+      fontSize: 12
     }
   }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", {
     style: {
       borderBottom: "1px solid #1a1a1a"
     }
-  }, [TH("Brand"), TH("Category"), TH("USD Price"), TH("Provider"), TH("Type"), TH("Demand"), TH("BP Regular"), TH("BP Premium"), TH("Disc."), TH("Countries", "#c8ff00"), TH("")])), /*#__PURE__*/React.createElement("tbody", null, filtered.map(p => {
+  }, ["Brand", "Category", "Price", "USD", "Provider", "Type", "Demand", "BP Reg.", "BP Prem.", "Disc.", "After disc.", ""].map(TH))), /*#__PURE__*/React.createElement("tbody", null, filtered.map(p => {
     const {
       reg,
       prem
     } = calcPricesAfterDiscount(p);
-    const countries = getCountries(p.id);
     return /*#__PURE__*/React.createElement("tr", {
       key: p.id,
       style: {
-        borderBottom: "1px solid #111"
+        borderBottom: "1px solid #0d0d0d"
       }
     }, /*#__PURE__*/React.createElement("td", {
       style: {
@@ -2275,6 +2030,11 @@ function ProductsTab({
     }, /*#__PURE__*/React.createElement(Badge, {
       variant: p.category.toLowerCase()
     }, p.category)), /*#__PURE__*/React.createElement("td", {
+      style: {
+        padding: "10px 12px",
+        color: "#555"
+      }
+    }, p.priceToBuffLocal, " ", p.currency), /*#__PURE__*/React.createElement("td", {
       style: {
         padding: "10px 12px",
         fontWeight: 700,
@@ -2324,33 +2084,21 @@ function ProductsTab({
       }
     }, p.discountPct, "%"), /*#__PURE__*/React.createElement("td", {
       style: {
-        padding: "10px 16px"
+        padding: "10px 12px"
       }
-    }, countries.length === 0 ? /*#__PURE__*/React.createElement("span", {
+    }, /*#__PURE__*/React.createElement("div", {
       style: {
-        color: "#2a2a2a",
-        fontSize: 11,
-        fontStyle: "italic"
+        fontSize: 11
       }
-    }, "Not allocated") : /*#__PURE__*/React.createElement("div", {
+    }, /*#__PURE__*/React.createElement("span", {
       style: {
-        display: "flex",
-        flexWrap: "wrap",
-        gap: 4,
-        maxWidth: 220
+        color: "#38bdf8"
       }
-    }, countries.map(c => /*#__PURE__*/React.createElement("span", {
-      key: c,
+    }, num(reg), " pts"), prem && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("br", null), /*#__PURE__*/React.createElement("span", {
       style: {
-        fontSize: 10,
-        fontWeight: 700,
-        color: "#c8ff00",
-        background: "rgba(200,255,0,0.07)",
-        border: "1px solid rgba(200,255,0,0.18)",
-        padding: "2px 6px",
-        borderRadius: 4
+        color: "#a78bfa"
       }
-    }, c)))), /*#__PURE__*/React.createElement("td", {
+    }, num(prem), " pts")))), /*#__PURE__*/React.createElement("td", {
       style: {
         padding: "10px 12px"
       }
@@ -2898,7 +2646,6 @@ function AllocateTab({
     category: "Gaming",
     priceToBuffLocal: "",
     currency: "USD",
-    provider: "GCOW",
     type: "Regular",
     bpRegular: "",
     bpPremium: "",
@@ -3033,7 +2780,7 @@ function AllocateTab({
       priceToBuffLocal: parseFloat(f.priceToBuffLocal),
       currency: f.currency,
       category: f.category,
-      provider: f.provider,
+      provider: f.vendor || "GCOW",
       type: f.type,
       bpRegular: parseFloat(f.bpRegular) || null,
       bpPremium: parseFloat(f.bpPremium) || null,
@@ -3275,13 +3022,6 @@ function AllocateTab({
     value: f.purpose || "MP",
     onChange: e => set("purpose", e.target.value)
   }, PURPOSES.map(p => /*#__PURE__*/React.createElement("option", {
-    key: p
-  }, p)))), /*#__PURE__*/React.createElement(Field, {
-    label: "Provider"
-  }, /*#__PURE__*/React.createElement(Select, {
-    value: f.provider,
-    onChange: e => set("provider", e.target.value)
-  }, PROVIDERS.map(p => /*#__PURE__*/React.createElement("option", {
     key: p
   }, p)))), (f.vendor || "GCOW") === "Loot Keys" && /*#__PURE__*/React.createElement("div", {
     style: {
@@ -6989,7 +6729,7 @@ function AdminTab({
 }
 
 // ── BUDGET CONSTANTS ────────────────────────────────────────────────────────────
-const VENDORS = ["GCOW", "Loot Keys", "Kinguin"];
+const VENDORS = ["GCOW", "Loot Keys", "Kinguin", "Internal", "Other"];
 const PURPOSES = ["MP", "Raffles", "Buff Pass"];
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
