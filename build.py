@@ -3194,20 +3194,31 @@ function FinanceRequests({ products, allocs, appUsers, transactions, setTransact
             </tbody>
           </table>
         </div>
-        <div style={{borderTop:"1px solid #1a1a1a",padding:"20px 18px"}}>
-          <div style={{fontSize:12,fontWeight:800,color:"#f1f5f9",marginBottom:14}}>Total Transfers per Month — Last 12 Months</div>
+        <div style={{borderTop:"1px solid #1a1a1a",padding:"20px 18px",background:"#0a0a0a"}}>
+          <div style={{fontSize:12,fontWeight:800,color:"#f1f5f9",marginBottom:16,letterSpacing:"0.04em"}}>Total Transfers per Month — Last 12 Months</div>
           {(()=>{
+            const hasData = monthlyData.some(d=>d.total>0);
             const maxVal = Math.max(...monthlyData.map(d=>d.total),1);
             return (
-              <div style={{display:"flex",alignItems:"flex-end",gap:4,height:120}}>
-                {monthlyData.map(d=>(
-                  <div key={d.key} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",height:"100%",justifyContent:"flex-end",gap:4}}>
-                    <div title={`$${d.total.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`}
-                      style={{width:"100%",background:"rgba(200,255,0,0.5)",border:"1px solid rgba(200,255,0,0.8)",borderRadius:"3px 3px 0 0",
-                        height:`${Math.max((d.total/maxVal)*90,d.total>0?3:0)}px`,cursor:"default"}}/>
-                    <div style={{fontSize:9,color:"#444",textAlign:"center",whiteSpace:"nowrap"}}>{d.label}</div>
-                  </div>
-                ))}
+              <div>
+                <div style={{display:"flex",alignItems:"flex-end",gap:4,height:100,marginBottom:4}}>
+                  {monthlyData.map(d=>(
+                    <div key={d.key} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",height:"100%",justifyContent:"flex-end"}}>
+                      <div title={`$${d.total.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`}
+                        style={{width:"100%",background:d.total>0?"rgba(200,255,0,0.55)":"rgba(255,255,255,0.04)",
+                          border:`1px solid ${d.total>0?"rgba(200,255,0,0.8)":"#1a1a1a"}`,
+                          borderRadius:"3px 3px 0 0",
+                          height:d.total>0?`${Math.max((d.total/maxVal)*80,4)}px`:"4px",
+                          cursor:"default",minHeight:"4px"}}/>
+                    </div>
+                  ))}
+                </div>
+                <div style={{display:"flex",gap:4}}>
+                  {monthlyData.map(d=>(
+                    <div key={d.key} style={{flex:1,textAlign:"center",fontSize:9,color:"#555",whiteSpace:"nowrap"}}>{d.label}</div>
+                  ))}
+                </div>
+                {!hasData&&<div style={{textAlign:"center",fontSize:11,color:"#333",marginTop:12}}>No transactions recorded yet</div>}
               </div>
             );
           })()}
