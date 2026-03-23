@@ -3033,7 +3033,9 @@ function FinanceRequests({ products, allocs, appUsers, transactions, setTransact
   const [updateId, setUpdateId] = useState("");
   const [updateSt, setUpdateSt] = useState("pending");
   const [detailTx, setDetailTx] = useState(null);
+  const [chartModal, setChartModal] = useState(null);
   const setFld = (k,v) => setF(p=>({...p,[k]:v}));
+  const DEPT_COLORS = { productDesktop:G, productMobile:"#38bdf8", marketing:"#fb923c", buffPay:"#a78bfa" };
   const totalAmount = useMemo(()=>DEPTS.filter(d=>active[d]).reduce((s,d)=>s+(parseFloat(f[d])||0),0),[f,active]);
 
   const monthlyData = useMemo(()=>{
@@ -3043,8 +3045,11 @@ function FinanceRequests({ products, allocs, appUsers, transactions, setTransact
       const d = new Date(now.getFullYear(),now.getMonth()-i,1);
       const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
       const label = d.toLocaleString("default",{month:"short",year:"2-digit"});
-      const total = transactions.filter(t=>(t.dateRequested||"").startsWith(key)).reduce((s,t)=>s+(t.totalAmount||0),0);
-      result.push({key,label,total});
+      const monthTxs = transactions.filter(t=>(t.dateRequested||"").startsWith(key));
+      const total = monthTxs.reduce((s,t)=>s+(t.totalAmount||0),0);
+      const depts = {};
+      DEPTS.forEach(dept=>{ depts[dept]=monthTxs.reduce((s,t)=>s+(t[dept]||0),0); });
+      result.push({key,label,total,depts,txs:monthTxs});
     }
     return result;
   },[transactions]);
@@ -3201,24 +3206,40 @@ function FinanceRequests({ products, allocs, appUsers, transactions, setTransact
             const maxVal = Math.max(...monthlyData.map(d=>d.total),1);
             return (
               <div>
-                <div style={{display:"flex",alignItems:"flex-end",gap:4,height:130,marginBottom:4}}>
-                  {monthlyData.map(d=>(
-                    <div key={d.key} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",height:"100%",justifyContent:"flex-end",gap:2}}>
-                      {d.total>0&&<div style={{fontSize:8,color:G,fontWeight:700,textAlign:"center",whiteSpace:"nowrap",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis"}}>
-                        {"$"+Math.round(d.total).toLocaleString()}
-                      </div>}
-                      <div title={`$${d.total.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`}
-                        style={{width:"100%",background:d.total>0?"rgba(200,255,0,0.55)":"rgba(255,255,255,0.04)",
-                          border:`1px solid ${d.total>0?"rgba(200,255,0,0.8)":"#1a1a1a"}`,
-                          borderRadius:"3px 3px 0 0",
-                          height:d.total>0?`${Math.max((d.total/maxVal)*90,6)}px`:"4px",
-                          cursor:"default",minHeight:"4px"}}/>
-                    </div>
-                  ))}
+                <div style={{display:"flex",alignItems:"flex-end",gap:4,height:140,marginBottom:4}}>
+                  {monthlyData.map(d=>{
+                    const barH = d.total>0 ? Math.max((d.total/maxVal)*110,6) : 4;
+                    const activeDepts = DEPTS.filter(dep=>d.depts[dep]>0);
+                    return (
+                      <div key={d.key} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",height:"100%",justifyContent:"flex-end",gap:2}}>
+                        {d.total>0&&<div style={{fontSize:8,color:"#888",fontWeight:700,textAlign:"center",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"100%"}}>
+                          {"$"+Math.round(d.total).toLocaleString()}
+                        </div>}
+                        <div style={{width:"100%",display:"flex",flexDirection:"column",borderRadius:"3px 3px 0 0",overflow:"hidden",height:`${barH}px`,cursor:activeDepts.length>0?"pointer":"default"}}>
+                          {d.total>0 ? DEPTS.filter(dep=>d.depts[dep]>0).map((dep,idx,arr)=>(
+                            <div key={dep}
+                              onClick={()=>setChartModal({month:d,dept:dep})}
+                              title={`${DEPT_LABELS[dep]}: $${Math.round(d.depts[dep]).toLocaleString()}`}
+                              style={{width:"100%",height:`${(d.depts[dep]/d.total)*100}%`,
+                                background:DEPT_COLORS[dep],opacity:0.8,
+                                borderTop:idx>0?"1px solid rgba(0,0,0,0.2)":""}}/>
+                          )) : <div style={{width:"100%",height:"100%",background:"rgba(255,255,255,0.04)",border:"1px solid #1a1a1a"}}/>}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-                <div style={{display:"flex",gap:4}}>
+                <div style={{display:"flex",gap:4,marginBottom:14}}>
                   {monthlyData.map(d=>(
                     <div key={d.key} style={{flex:1,textAlign:"center",fontSize:9,color:"#555",whiteSpace:"nowrap"}}>{d.label}</div>
+                  ))}
+                </div>
+                <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
+                  {DEPTS.map(dep=>(
+                    <div key={dep} style={{display:"flex",alignItems:"center",gap:5}}>
+                      <div style={{width:10,height:10,borderRadius:2,background:DEPT_COLORS[dep],opacity:0.8}}/>
+                      <span style={{fontSize:11,color:"#555"}}>{DEPT_LABELS[dep]}</span>
+                    </div>
                   ))}
                 </div>
                 {!hasData&&<div style={{textAlign:"center",fontSize:11,color:"#333",marginTop:12}}>No transactions recorded yet</div>}
@@ -3478,6 +3499,36 @@ function FinanceRequests({ products, allocs, appUsers, transactions, setTransact
     {toast&&(
       <div style={{position:"fixed",bottom:24,right:24,background:"#0d0d0d",border:"1px solid rgba(74,222,128,0.35)",borderRadius:10,padding:"13px 20px",fontSize:13,fontWeight:700,color:"#4ade80",zIndex:9999,boxShadow:"0 8px 32px rgba(0,0,0,0.55)",display:"flex",alignItems:"center",gap:8}}>
         ✓ {toast}
+      </div>
+    )}
+    {chartModal&&(
+      <div onClick={()=>setChartModal(null)}
+        style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.7)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+        <div onClick={e=>e.stopPropagation()}
+          style={{background:"#0d0d0d",border:"1px solid #1a1a1a",borderRadius:16,padding:28,width:"100%",maxWidth:420}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+            <div>
+              <div style={{fontSize:16,fontWeight:900,color:DEPT_COLORS[chartModal.dept]}}>{DEPT_LABELS[chartModal.dept]}</div>
+              <div style={{fontSize:12,color:"#555",marginTop:2}}>{chartModal.month.label}</div>
+            </div>
+            <button onClick={()=>setChartModal(null)} style={{background:"none",border:"1px solid #2a2a2a",color:"#555",borderRadius:8,padding:"5px 10px",fontSize:13,cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>✕</button>
+          </div>
+          <div style={{marginBottom:16}}>
+            {chartModal.month.txs.filter(t=>(t[chartModal.dept]||0)>0).map(t=>(
+              <div key={t.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid #1a1a1a"}}>
+                <div>
+                  <div style={{fontSize:13,fontWeight:700,color:"#f1f5f9"}}>{t.vendor}</div>
+                  <div style={{fontSize:11,color:"#555",marginTop:2}}>{t.dateRequested} · #{t.id}</div>
+                </div>
+                <div style={{fontSize:15,fontWeight:800,color:DEPT_COLORS[chartModal.dept]}}>{usd(t[chartModal.dept])}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingTop:12,borderTop:"1px solid #1a1a1a"}}>
+            <span style={{fontSize:11,color:"#555",fontWeight:700,textTransform:"uppercase",letterSpacing:"0.06em"}}>Total</span>
+            <span style={{fontSize:20,fontWeight:900,color:DEPT_COLORS[chartModal.dept]}}>{usd(chartModal.month.depts[chartModal.dept])}</span>
+          </div>
+        </div>
       </div>
     )}
     </>
