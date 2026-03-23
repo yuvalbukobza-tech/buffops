@@ -13,6 +13,9 @@ with open(SRC, 'r', encoding='utf-8') as f:
     jsx = f.read()
 
 jsx = jsx.replace('import { useState, useMemo } from "react";\n', '')
+jsx = jsx.replace('const PROVIDERS  = ["GCOW","Internal","Other"];', 'const PROVIDERS  = ["GCOW","Loot Keys","Kinguin","Internal","Other"];')
+jsx = jsx.replace('<span style={{color:G}}>BUFF</span><span style={{color:"#333",margin:"0 5px"}}>✦</span><span style={{color:"#f1f5f9"}}>Marketplace</span>', '<span style={{color:G}}>Buff</span><span style={{color:"#f1f5f9"}}>Ops</span>')
+jsx = jsx.replace('<Field label="Provider"><Select value={f.provider} onChange={e=>set("provider",e.target.value)}>{PROVIDERS.map(p=><option key={p}>{p}</option>)}</Select></Field>', '<Field label="Vendor"><Select value={f.provider} onChange={e=>set("provider",e.target.value)}>{PROVIDERS.map(p=><option key={p}>{p}</option>)}</Select></Field>')
 jsx = jsx.replace('discountPct:15,demandLevel:"Medium" };', 'discountPct:0,demandLevel:"Medium" };')
 jsx = jsx.replace('export default function App', 'function App')
 
@@ -57,7 +60,7 @@ OLD_PRODUCTS_TAB = '''function ProductsTab({ products, setProducts }) {
 
       <div style={{background:"#0d0d0d",border:"1px solid #1a1a1a",borderRadius:14,overflow:"hidden"}}>
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-          <thead><tr style={{borderBottom:"1px solid #1a1a1a"}}>{["Brand","Category","Price","USD","Provider","Type","Demand","BP Reg.","BP Prem.","Disc.","After disc.",""].map(TH)}</tr></thead>
+          <thead><tr style={{borderBottom:"1px solid #1a1a1a"}}>{["Brand","Category","Price","USD","Vendor","Type","Demand","BP Reg.","BP Prem.","Disc.","After disc.",""].map(TH)}</tr></thead>
           <tbody>
             {filtered.map(p=>{
               const {reg,prem}=calcPricesAfterDiscount(p);
@@ -447,7 +450,7 @@ old_prod_table_start = (
     '      <div style={{background:"#0d0d0d",border:"1px solid #1a1a1a",borderRadius:14,overflow:"hidden"}}>\n'
     '        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>\n'
     '          <thead><tr style={{borderBottom:"1px solid #1a1a1a"}}>'
-    '{["Brand","Category","Price","USD","Provider","Type","Demand","BP Reg.","BP Prem.","Disc.","After disc.",""].map(TH)}'
+    '{["Brand","Category","Price","USD","Vendor","Type","Demand","BP Reg.","BP Prem.","Disc.","After disc.",""].map(TH)}'
     '</tr></thead>'
 )
 new_prod_table_start = (
@@ -572,15 +575,13 @@ jsx = jsx.replace(
 jsx = jsx.replace(
     '<div style={{marginRight:36,padding:"16px 0"}}>\n'
     '          <div style={{fontSize:15,fontWeight:900,letterSpacing:"-0.03em"}}>\n'
-    '            <span style={{color:G}}>BUFF</span><span style={{color:"#333",margin:"0 5px"}}>✦</span><span style={{color:"#f1f5f9"}}>Marketplace</span>\n'
+    '            <span style={{color:G}}>Buff</span><span style={{color:"#f1f5f9"}}>Ops</span>\n'
     '          </div>\n'
     '          <div style={{fontSize:9,color:"#333",fontWeight:700,letterSpacing:"0.1em",textTransform:"uppercase",marginTop:1}}>Planning Platform</div>\n'
     '        </div>',
     '<div style={{marginRight:48,padding:"10px 0"}}>\n'
     '          <div style={{fontSize:26,fontWeight:900,letterSpacing:"-0.05em",lineHeight:1}}>\n'
-    '            <span style={{color:G}}>BUFF</span>'
-    '<span style={{color:"#2a2a2a",margin:"0 10px",fontWeight:400}}>✦</span>'
-    '<span style={{color:"#f1f5f9"}}>Marketplace</span>\n'
+    '            <span style={{color:G}}>Buff</span><span style={{color:"#f1f5f9"}}>Ops</span>\n'
     '          </div>\n'
     '          <div style={{fontSize:10,color:"#555",fontWeight:700,letterSpacing:"0.14em",textTransform:"uppercase",marginTop:6}}>Planning Platform</div>\n'
     '        </div>'
@@ -638,7 +639,7 @@ jsx = jsx.replace(
     '        {tab==="products"  && <ProductsTab  products={products} setProducts={setProducts} allocs={allocs} setTab={setTab}/>}\n'
     '        {tab==="countries" && <CountriesTab products={products} allocs={allocs} setAllocs={setAllocs}/>}\n'
     '        {tab==="allocate"  && <AllocateTab  products={products} allocs={allocs} setProducts={setProducts} setAllocs={setAllocs}/>}\n'
-    '        {tab==="budget"    && <BudgetTab    products={products} allocs={allocs} orders={orders} setOrders={setOrders} transactions={transactions} setTransactions={setTransactions} displayName={displayName} appUsers={appUsers} analyticsRows={analyticsRows} analyticsFrom={analyticsFrom} analyticsTo={analyticsTo} analyticsStatus={analyticsStatus}/>}\n'
+    '        {tab==="budget"    && <BudgetTab    products={products} allocs={allocs} orders={orders} setOrders={setOrders} transactions={transactions} setTransactions={setTransactions} displayName={displayName} appUsers={appUsers} isAdmin={isAdmin} analyticsRows={analyticsRows} analyticsFrom={analyticsFrom} analyticsTo={analyticsTo} analyticsStatus={analyticsStatus}/>}\n'
     '        {tab==="admin"     && isAdmin && <AdminTab appUsers={appUsers} setAppUsers={setAppUsers}/>}'
 )
 
@@ -687,7 +688,7 @@ function StepIndicator({ step }) {
 function AllocateTab({ products, allocs, setProducts, setAllocs }) {
   const BLANK = {
     brand:"", category:"Gaming", priceToBuffLocal:"", currency:"USD",
-    provider:"GCOW", type:"Regular", bpRegular:"", bpPremium:"",
+    type:"Regular", bpRegular:"", bpPremium:"",
     discountPct:0, demandLevel:"Medium", redashName:"",
     vendor:"GCOW", purpose:"MP", lootkeyscode:"",
   };
@@ -771,7 +772,7 @@ function AllocateTab({ products, allocs, setProducts, setAllocs }) {
     const newProd = {
       id: newId, brand: f.brand.trim(),
       priceToBuffLocal: parseFloat(f.priceToBuffLocal),
-      currency: f.currency, category: f.category, provider: f.provider, type: f.type,
+      currency: f.currency, category: f.category, provider: f.vendor||"GCOW", type: f.type,
       bpRegular:   parseFloat(f.bpRegular)   || null,
       bpPremium:   parseFloat(f.bpPremium)   || null,
       discountPct: parseFloat(f.discountPct) || 0,
@@ -882,11 +883,6 @@ function AllocateTab({ products, allocs, setProducts, setAllocs }) {
             <Field label="Purpose" hint="MP = Marketplace, Raffles, Buff Pass">
               <Select value={f.purpose||"MP"} onChange={e=>set("purpose",e.target.value)}>
                 {PURPOSES.map(p=><option key={p}>{p}</option>)}
-              </Select>
-            </Field>
-            <Field label="Provider">
-              <Select value={f.provider} onChange={e=>set("provider",e.target.value)}>
-                {PROVIDERS.map(p=><option key={p}>{p}</option>)}
               </Select>
             </Field>
             {(f.vendor||"GCOW")==="Loot Keys" && (
@@ -2603,7 +2599,7 @@ function AdminTab({ appUsers, setAppUsers }) {
 }
 
 // ── BUDGET CONSTANTS ────────────────────────────────────────────────────────────
-const VENDORS  = ["GCOW","Loot Keys","Kinguin"];
+const VENDORS  = ["GCOW","Loot Keys","Kinguin","Internal","Other"];
 const PURPOSES = ["MP","Raffles","Buff Pass"];
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -2735,7 +2731,7 @@ function BudgetOverview({ products, allocs }) {
 }
 
 // ── VENDOR ORDERS ──────────────────────────────────────────────────────────────
-function VendorOrders({ products, allocs, orders, setOrders, transactions, setTransactions, displayName }) {
+function VendorOrders({ products, allocs, orders, setOrders, transactions, setTransactions, displayName, isAdmin }) {
   const today = new Date().toISOString().slice(0,10);
   const _vod = () => { try{return JSON.parse(localStorage.getItem('voOrderDraft'))||{};}catch{return{};} };
   const [step,         setStep]        = useState(()=>_vod().step||1);
@@ -2810,6 +2806,7 @@ function VendorOrders({ products, allocs, orders, setOrders, transactions, setTr
           <div style={{fontSize:18,fontWeight:900,color:"#f1f5f9"}}>{o.vendor} — {periodLabel(o)}</div>
           <div style={{flex:1}}/>
           {o.vendor==="Loot Keys"&&<button onClick={()=>downloadCSV(o)} style={{background:G,color:"#0a0a0a",border:"none",borderRadius:8,padding:"9px 20px",fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>↓ Download CSV</button>}
+          {isAdmin&&<button onClick={()=>{ if(window.confirm("Delete this order?")){ setOrders(p=>p.filter(x=>x.id!==o.id)); setViewOrder(null); }}} style={{background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.3)",color:"#f87171",borderRadius:8,padding:"8px 16px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>🗑 Delete</button>}
         </div>
         <div style={{fontSize:12,color:"#555",marginBottom:20}}>{o.date} · Status: <span style={{color:o.status==="draft"?"#fb923c":o.status==="sent"?"#38bdf8":G,fontWeight:700}}>{o.status}</span> · Total: <span style={{color:G,fontWeight:800}}>{usd(o.totalUSD)}</span></div>
         {Object.entries(byBrand).map(([brand,items])=>(
@@ -2990,8 +2987,9 @@ function VendorOrders({ products, allocs, orders, setOrders, transactions, setTr
                     <option value="draft">Draft</option><option value="sent">Sent</option><option value="delivered">Delivered</option>
                   </select>
                 </td>
-                <td style={{padding:"11px 16px"}}>
+                <td style={{padding:"11px 16px",display:"flex",gap:6,alignItems:"center"}}>
                   <button onClick={()=>setViewOrder(o)} style={{background:"#1a1a1a",border:"1px solid #2a2a2a",color:"#888",borderRadius:6,padding:"5px 12px",fontSize:11,cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>View</button>
+                  {isAdmin&&<button onClick={()=>{ if(window.confirm("Delete this order?")) setOrders(p=>p.filter(x=>x.id!==o.id)); }} style={{background:"rgba(239,68,68,0.08)",border:"1px solid rgba(239,68,68,0.25)",color:"#f87171",borderRadius:6,padding:"5px 10px",fontSize:11,cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>🗑</button>}
                 </td>
               </tr>
             ))}</tbody>
@@ -3003,7 +3001,7 @@ function VendorOrders({ products, allocs, orders, setOrders, transactions, setTr
 }
 
 // ── FINANCE REQUESTS ───────────────────────────────────────────────────────────
-function FinanceRequests({ products, allocs, appUsers, transactions, setTransactions, displayName }) {
+function FinanceRequests({ products, allocs, appUsers, transactions, setTransactions, displayName, isAdmin }) {
   const today = new Date().toISOString().slice(0,10);
   const DEPTS = ["productDesktop","productMobile","marketing","buffPay"];
   const DEPT_LABELS = { productDesktop:"Product Desktop", productMobile:"Product Mobile", marketing:"Marketing", buffPay:"Buff Pay" };
@@ -3014,6 +3012,8 @@ function FinanceRequests({ products, allocs, appUsers, transactions, setTransact
   const [emailTx,        setEmailTx]        = useState(null);
   const [emailRecips,    setEmailRecips]    = useState({});
   const [emailStatus,    setEmailStatus]    = useState("idle");
+  const [toast,          setToast]          = useState("");
+  const [editTx,         setEditTx]         = useState(null);
   const plannedByVendor = useMemo(()=>{
     const m = {};
     Object.values(allocs||{}).forEach(cr=>cr.forEach(alloc=>{
@@ -3034,8 +3034,20 @@ function FinanceRequests({ products, allocs, appUsers, transactions, setTransact
   const [updateSt, setUpdateSt] = useState("pending");
   const [detailTx, setDetailTx] = useState(null);
   const setFld = (k,v) => setF(p=>({...p,[k]:v}));
-
   const totalAmount = useMemo(()=>DEPTS.filter(d=>active[d]).reduce((s,d)=>s+(parseFloat(f[d])||0),0),[f,active]);
+
+  const monthlyData = useMemo(()=>{
+    const now = new Date();
+    const result = [];
+    for(let i=11;i>=0;i--){
+      const d = new Date(now.getFullYear(),now.getMonth()-i,1);
+      const key = d.toISOString().slice(0,7);
+      const label = d.toLocaleString("default",{month:"short",year:"2-digit"});
+      const total = transactions.filter(t=>(t.dateRequested||"").startsWith(key)).reduce((s,t)=>s+(t.totalAmount||0),0);
+      result.push({key,label,total});
+    }
+    return result;
+  },[transactions]);
 
   function handleSubmit(e) {
     e.preventDefault();
@@ -3182,6 +3194,24 @@ function FinanceRequests({ products, allocs, appUsers, transactions, setTransact
             </tbody>
           </table>
         </div>
+        <div style={{borderTop:"1px solid #1a1a1a",padding:"20px 18px"}}>
+          <div style={{fontSize:12,fontWeight:800,color:"#f1f5f9",marginBottom:14}}>Total Transfers per Month — Last 12 Months</div>
+          {(()=>{
+            const maxVal = Math.max(...monthlyData.map(d=>d.total),1);
+            return (
+              <div style={{display:"flex",alignItems:"flex-end",gap:4,height:120}}>
+                {monthlyData.map(d=>(
+                  <div key={d.key} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",height:"100%",justifyContent:"flex-end",gap:4}}>
+                    <div title={`$${d.total.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}`}
+                      style={{width:"100%",background:"rgba(200,255,0,0.5)",border:"1px solid rgba(200,255,0,0.8)",borderRadius:"3px 3px 0 0",
+                        height:`${Math.max((d.total/maxVal)*90,d.total>0?3:0)}px`,cursor:"default"}}/>
+                    <div style={{fontSize:9,color:"#444",textAlign:"center",whiteSpace:"nowrap"}}>{d.label}</div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+        </div>
       </div>
     </div>
     {/* Transaction detail modal */}
@@ -3196,7 +3226,11 @@ function FinanceRequests({ products, allocs, appUsers, transactions, setTransact
               <div style={{fontSize:20,fontWeight:900,color:"#f1f5f9",marginBottom:4}}>Finance Request #{detailTx.id}</div>
               <div style={{fontSize:12,color:"#555"}}>{detailTx.vendor} · {detailTx.dateRequested} · by {detailTx.enteredBy||"—"}</div>
             </div>
-            <button onClick={()=>setDetailTx(null)} style={{background:"none",border:"1px solid #2a2a2a",color:"#555",borderRadius:8,padding:"6px 12px",fontSize:13,cursor:"pointer",fontFamily:"inherit",fontWeight:700,marginLeft:12,flexShrink:0}}>✕</button>
+            <div style={{display:"flex",gap:8,alignItems:"center",marginLeft:12,flexShrink:0}}>
+              {isAdmin&&<button onClick={()=>{ setEditTx({...detailTx}); setDetailTx(null); }} style={{background:"rgba(200,255,0,0.08)",border:"1px solid rgba(200,255,0,0.25)",color:G,borderRadius:8,padding:"6px 12px",fontSize:12,cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>✏ Edit</button>}
+              {isAdmin&&<button onClick={()=>{ if(window.confirm("Delete this request?")){ setTransactions(p=>p.filter(t=>t.id!==detailTx.id)); setDetailTx(null); }}} style={{background:"rgba(239,68,68,0.08)",border:"1px solid rgba(239,68,68,0.25)",color:"#f87171",borderRadius:8,padding:"6px 12px",fontSize:12,cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>🗑 Delete</button>}
+              <button onClick={()=>setDetailTx(null)} style={{background:"none",border:"1px solid #2a2a2a",color:"#555",borderRadius:8,padding:"6px 12px",fontSize:13,cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>✕</button>
+            </div>
           </div>
           {/* Total + status */}
           <div style={{display:"flex",gap:12,marginBottom:20}}>
@@ -3219,7 +3253,7 @@ function FinanceRequests({ products, allocs, appUsers, transactions, setTransact
                     const sbody=["Transaction status has been updated.","","Vendor: "+detailTx.vendor,"Transaction ID: #"+detailTx.id,"Amount: "+usd(detailTx.totalAmount),"New Status: "+ns.charAt(0).toUpperCase()+ns.slice(1),"Updated by: "+displayName+(senderEmail?" <"+senderEmail+">":""),"Date: "+new Date().toISOString().slice(0,10),"","Note: Reply to this email to reach the person who made this update."].join(NLs);
                     const ssubj="Status Update: Finance Request #"+detailTx.id+" - "+detailTx.vendor+" - "+ns.charAt(0).toUpperCase()+ns.slice(1);
                     const sparams=new URLSearchParams({action:"sendEmail",to:toList,subject:ssubj,body:sbody,senderName:displayName,senderEmail});
-                    fetch(SCRIPT_URL+"?"+sparams.toString()).catch(()=>{});
+                    fetch(SCRIPT_URL+"?"+sparams.toString()).then(()=>{ setToast("Email sent successfully!"); setTimeout(()=>setToast(""),3000); }).catch(()=>{});
                   }
                 }}
                 style={{background:"#0d0d0d",border:"1px solid #2a2a2a",borderRadius:6,color:statusColor(detailTx.status),fontSize:12,padding:"6px 10px",outline:"none",fontFamily:"inherit",fontWeight:800,cursor:"pointer",width:"100%"}}>
@@ -3289,6 +3323,71 @@ function FinanceRequests({ products, allocs, appUsers, transactions, setTransact
         </div>
       </div>
     )}
+    {/* Edit Transaction Modal */}
+    {editTx&&(
+      <div onClick={()=>setEditTx(null)}
+        style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.8)",zIndex:2500,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+        <div onClick={e=>e.stopPropagation()}
+          style={{background:"#0d0d0d",border:"1px solid #1a1a1a",borderRadius:16,padding:28,width:"100%",maxWidth:520,maxHeight:"90vh",overflowY:"auto"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+            <div style={{fontSize:16,fontWeight:900,color:"#f1f5f9"}}>Edit Request #{editTx.id}</div>
+            <button onClick={()=>setEditTx(null)} style={{background:"none",border:"1px solid #2a2a2a",color:"#555",borderRadius:8,padding:"5px 10px",fontSize:13,cursor:"pointer",fontFamily:"inherit",fontWeight:700}}>✕</button>
+          </div>
+          {/* Vendor */}
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#555",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Vendor</div>
+            <input value={editTx.vendor} onChange={e=>setEditTx(p=>({...p,vendor:e.target.value}))}
+              style={{width:"100%",background:"#111",border:"1px solid #2a2a2a",borderRadius:8,color:"#f1f5f9",fontSize:13,padding:"9px 12px",fontFamily:"inherit",outline:"none"}}/>
+          </div>
+          {/* Date */}
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#555",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Date</div>
+            <input type="date" value={editTx.dateRequested} onChange={e=>setEditTx(p=>({...p,dateRequested:e.target.value}))}
+              style={{width:"100%",background:"#111",border:"1px solid #2a2a2a",borderRadius:8,color:"#f1f5f9",fontSize:13,padding:"9px 12px",fontFamily:"inherit",outline:"none"}}/>
+          </div>
+          {/* Status */}
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#555",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Status</div>
+            <select value={editTx.status} onChange={e=>setEditTx(p=>({...p,status:e.target.value}))}
+              style={{width:"100%",background:"#111",border:"1px solid #2a2a2a",borderRadius:8,color:statusColor(editTx.status),fontSize:13,padding:"9px 12px",fontFamily:"inherit",outline:"none",fontWeight:700,cursor:"pointer"}}>
+              <option value="pending">Pending</option>
+              <option value="delivered">Delivered</option>
+            </select>
+          </div>
+          {/* Dept amounts */}
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#555",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10}}>Department Amounts</div>
+            {DEPTS.map(d=>(
+              <div key={d} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+                <div style={{fontSize:12,color:"#f1f5f9",fontWeight:600,width:140,flexShrink:0}}>{DEPT_LABELS[d]}</div>
+                <input type="number" min="0" placeholder="0" value={editTx[d]||""} onChange={e=>setEditTx(p=>({...p,[d]:e.target.value}))}
+                  style={{flex:1,background:"#111",border:"1px solid #2a2a2a",borderRadius:8,color:G,fontSize:13,padding:"7px 10px",fontFamily:"inherit",outline:"none",textAlign:"right"}}/>
+              </div>
+            ))}
+            <div style={{display:"flex",justifyContent:"flex-end",marginTop:8,fontSize:13,fontWeight:800,color:G}}>
+              Total: {usd(DEPTS.reduce((s,d)=>s+(parseFloat(editTx[d])||0),0))}
+            </div>
+          </div>
+          {/* Note */}
+          <div style={{marginBottom:20}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#555",textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}>Note</div>
+            <textarea value={editTx.note||""} onChange={e=>setEditTx(p=>({...p,note:e.target.value}))}
+              rows={3} style={{width:"100%",background:"#111",border:"1px solid #2a2a2a",borderRadius:8,color:"#888",fontSize:13,padding:"9px 12px",fontFamily:"inherit",outline:"none",resize:"vertical"}}/>
+          </div>
+          <button onClick={()=>{
+            const total=DEPTS.reduce((s,d)=>s+(parseFloat(editTx[d])||0),0);
+            const split=DEPTS.filter(d=>parseFloat(editTx[d])>0).map(d=>DEPT_LABELS[d]+": "+usd(parseFloat(editTx[d]))).join(" / ");
+            const updated={...editTx,totalAmount:total,departmentsSplit:split};
+            Object.keys(updated).forEach(k=>{ if(DEPTS.includes(k)) updated[k]=parseFloat(updated[k])||0; });
+            setTransactions(p=>p.map(t=>t.id===updated.id?updated:t));
+            setEditTx(null);
+            setToast("Request updated!"); setTimeout(()=>setToast(""),3000);
+          }} style={{width:"100%",background:G,color:"#0a0a0a",border:"none",borderRadius:8,padding:"12px",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"inherit"}}>
+            Save Changes
+          </button>
+        </div>
+      </div>
+    )}
     {/* Email Panel Modal */}
     {emailPanel&&emailTx&&(
       <div onClick={()=>setEmailPanel(false)}
@@ -3337,7 +3436,7 @@ function FinanceRequests({ products, allocs, appUsers, transactions, setTransact
               const params = new URLSearchParams({ action:"sendEmail", to:toStr, subject:subj, body });
               fetch(SCRIPT_URL+"?"+params.toString())
                 .then(r=>r.json())
-                .then(data=>{ if(data.ok) setEmailStatus("sent"); else setEmailStatus(data.error||"error"); })
+                .then(data=>{ if(data.ok){ setEmailPanel(false); setEmailStatus("idle"); setToast("Email sent successfully!"); setTimeout(()=>setToast(""),3000); } else setEmailStatus(data.error||"error"); })
                 .catch(err=>setEmailStatus("error"));
             }
             return (
@@ -3360,6 +3459,11 @@ function FinanceRequests({ products, allocs, appUsers, transactions, setTransact
             );
           })()}
         </div>
+      </div>
+    )}
+    {toast&&(
+      <div style={{position:"fixed",bottom:24,right:24,background:"#0d0d0d",border:"1px solid rgba(74,222,128,0.35)",borderRadius:10,padding:"13px 20px",fontSize:13,fontWeight:700,color:"#4ade80",zIndex:9999,boxShadow:"0 8px 32px rgba(0,0,0,0.55)",display:"flex",alignItems:"center",gap:8}}>
+        ✓ {toast}
       </div>
     )}
     </>
@@ -3511,7 +3615,7 @@ function BudgetVsActual({ products, allocs, analyticsRows, analyticsFrom, analyt
 }
 
 // ── BUDGET TAB ──────────────────────────────────────────────────────────────────
-function BudgetTab({ products, allocs, orders, setOrders, transactions, setTransactions, displayName, appUsers, analyticsRows, analyticsFrom, analyticsTo, analyticsStatus }) {
+function BudgetTab({ products, allocs, orders, setOrders, transactions, setTransactions, displayName, appUsers, isAdmin, analyticsRows, analyticsFrom, analyticsTo, analyticsStatus }) {
   const [sub, setSub] = useState("overview");
   const SUB = [
     { id:"overview",  label:"Budget Overview"   },
@@ -3533,8 +3637,8 @@ function BudgetTab({ products, allocs, orders, setOrders, transactions, setTrans
       </div>
       {sub==="overview"  &&<BudgetOverview  products={products} allocs={allocs}/>}
       {sub==="vs-actual" &&<BudgetVsActual  products={products} allocs={allocs} analyticsRows={analyticsRows} analyticsFrom={analyticsFrom} analyticsTo={analyticsTo} analyticsStatus={analyticsStatus}/>}
-      {sub==="orders"    &&<VendorOrders    products={products} allocs={allocs} orders={orders} setOrders={setOrders} transactions={transactions} setTransactions={setTransactions} displayName={displayName}/>}
-      {sub==="finance"   &&<FinanceRequests products={products} allocs={allocs} appUsers={appUsers} transactions={transactions} setTransactions={setTransactions} displayName={displayName}/>}
+      {sub==="orders"    &&<VendorOrders    products={products} allocs={allocs} orders={orders} setOrders={setOrders} transactions={transactions} setTransactions={setTransactions} displayName={displayName} isAdmin={isAdmin}/>}
+      {sub==="finance"   &&<FinanceRequests products={products} allocs={allocs} appUsers={appUsers} transactions={transactions} setTransactions={setTransactions} displayName={displayName} isAdmin={isAdmin}/>}
     </div>
   );
 }
@@ -3587,7 +3691,7 @@ jsx = jsx.replace(
     '  const TABS = [',
 
     '  const USERS = [\n'
-    '    { user: "yuvalbukobza", pass: "1205", display: "Admin" },\n'
+    '    { user: "yuvalbukobza", pass: "1205", display: "Yuval Bukobza", isAdmin: true },\n'
     '    { user: "itaiguzik",    pass: "123456789", display: "itaiguzik" },\n'
     '    // הוסף משתמשים נוספים כאן:\n'
     '    // { user: "שם_משתמש", pass: "סיסמא", display: "שם תצוגה" },\n'
@@ -3641,7 +3745,7 @@ jsx = jsx.replace(
     '    if (match) {\n'
     '      const appU = (appUsers||[]).find(u=>u.username===loginU);\n'
     '      const fullName = appU ? ((appU.firstName+" "+appU.lastName).trim()||match.display) : match.display;\n'
-    '      const adminFlag = match.display === "Admin";\n'
+    '      const adminFlag = !!match.isAdmin;\n'
     '      sessionStorage.setItem("buff_auth", "1");\n'
     '      sessionStorage.setItem("buff_display", fullName);\n'
     '      sessionStorage.setItem("buff_admin", adminFlag ? "1" : "0");\n'
@@ -3697,9 +3801,8 @@ jsx = jsx.replace(
     '      <div style={{width:360,padding:"48px 40px",background:"#0d0d0d",border:"1px solid #1a1a1a",borderRadius:20}}>\n'
     '        <div style={{textAlign:"center",marginBottom:36}}>\n'
     '          <div style={{fontSize:28,fontWeight:900,letterSpacing:"-0.05em",marginBottom:8}}>\n'
-    '            <span style={{color:"#c8ff00"}}>BUFF</span>\n'
-    '            <span style={{color:"#2a2a2a",margin:"0 10px",fontWeight:400}}>✦</span>\n'
-    '            <span style={{color:"#f1f5f9"}}>Marketplace</span>\n'
+    '            <span style={{color:"#c8ff00"}}>Buff</span>\n'
+    '            <span style={{color:"#f1f5f9"}}>Ops</span>\n'
     '          </div>\n'
     '          <div style={{fontSize:11,color:"#444",letterSpacing:"0.12em",textTransform:"uppercase"}}>Planning Platform</div>\n'
     '        </div>\n'
@@ -3731,8 +3834,7 @@ jsx = jsx.replace(
     '    <div style={{minHeight:"100vh",background:"#080808",display:"flex",flexDirection:"column",\n'
     '      alignItems:"center",justifyContent:"center",fontFamily:"\'DM Sans\',\'Segoe UI\',sans-serif"}}>\n'
     '      <div style={{fontSize:28,fontWeight:900,letterSpacing:"-0.05em",marginBottom:16}}>\n'
-    '        <span style={{color:"#c8ff00"}}>BUFF</span><span style={{color:"#2a2a2a",margin:"0 10px",fontWeight:400}}>✦</span>\n'
-    '        <span style={{color:"#f1f5f9"}}>Marketplace</span>\n'
+    '        <span style={{color:"#c8ff00"}}>Buff</span><span style={{color:"#f1f5f9"}}>Ops</span>\n'
     '      </div>\n'
     '      <div style={{fontSize:13,color:"#444",letterSpacing:"0.08em",textTransform:"uppercase"}}>Loading data from Google Sheets...</div>\n'
     '    </div>\n'
@@ -3800,7 +3902,7 @@ html = """<!DOCTYPE html>
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>BUFF Marketplace</title>
+  <title>BuffOps</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230d0d0d'/><text x='16' y='23' text-anchor='middle' font-family='Arial Black,sans-serif' font-weight='900' font-size='20' fill='%23c8ff00'>B</text></svg>"/>
   <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
