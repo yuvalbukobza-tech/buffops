@@ -882,8 +882,6 @@ jsx = jsx.replace(
     '                    return PURPOSES.map(pu=>{\n'
     '                      const rows=sel.rows.filter(r=>{ const p=products.find(x=>x.id===r.productId); return p&&(p.purpose||"MP")===pu; });\n'
     '                      if(!rows.length) return null;\n'
-    '                      const secPlanned=rows.reduce((s,r)=>{ const p=products.find(x=>x.id===r.productId); return s+(p?calcDailyBudget(p,r):0); },0);\n'
-    '                      const secReal=rows.reduce((s,r)=>{ const p=products.find(x=>x.id===r.productId); return s+(p?calcRealDaily(p,r):0); },0);\n'
     '                      return (\n'
     '                        <tbody key={pu}>\n'
     '                          <tr style={{background:"#0a0a0a"}}>\n'
@@ -892,13 +890,6 @@ jsx = jsx.replace(
     '                            </td>\n'
     '                          </tr>\n'
     '                          {rows.map(renderRow)}\n'
-    '                          <tr style={{borderTop:"1px solid #1a1a1a",background:"#080808"}}>\n'
-    '                            <td colSpan={7} style={{padding:"8px 16px",fontSize:11,color:"#444",fontWeight:700}}>{pu} subtotal</td>\n'
-    '                            <td style={{padding:"8px 16px",color:"#444",fontWeight:700,fontSize:11}}>{usd(secPlanned)}</td>\n'
-    '                            <td style={{padding:"8px 16px",color:purposeColor(pu),fontWeight:800,fontSize:11}}>{usd(secReal)}</td>\n'
-    '                            <td style={{padding:"8px 16px",color:"#444",fontWeight:700,fontSize:11}}>{usd(secPlanned*30.5)}</td>\n'
-    '                            <td style={{padding:"8px 16px",color:purposeColor(pu),fontWeight:800,fontSize:11}}>{usd(secReal*30.5)}</td>\n'
-    '                          </tr>\n'
     '                        </tbody>\n'
     '                      );\n'
     '                    });\n'
@@ -1076,7 +1067,7 @@ jsx = jsx.replace(
     '        {tab==="products"  && <ProductsTab  products={products} setProducts={setProducts} allocs={allocs} setTab={setTab} raffles={raffles} setRaffles={setRaffles} setAllocateMode={setAllocateMode}/>}\n'
     '        {tab==="countries" && <CountriesTab products={products} allocs={allocs} setAllocs={setAllocs} raffles={raffles} raffleCountries={raffleCountries} setRaffleCountries={setRaffleCountries}/>}\n'
     '        {tab==="allocate"  && <AllocateTab  products={products} allocs={allocs} setProducts={setProducts} setAllocs={setAllocs} raffles={raffles} setRaffles={setRaffles} raffleCountries={raffleCountries} setRaffleCountries={setRaffleCountries} defaultMode={allocateMode}/>}\n'
-    '        {tab==="budget"    && <BudgetTab    products={products} allocs={allocs} orders={orders} setOrders={setOrders} transactions={transactions} setTransactions={setTransactions} displayName={displayName} appUsers={appUsers} isAdmin={isAdmin} analyticsRows={analyticsRows} analyticsFrom={analyticsFrom} analyticsTo={analyticsTo} analyticsStatus={analyticsStatus} raffles={raffles} raffleCountries={raffleCountries} budgetExtras={budgetExtras} setBudgetExtras={setBudgetExtras}/>}\n'
+    '        {tab==="budget"    && <BudgetTab    products={products} allocs={allocs} orders={orders} setOrders={setOrders} transactions={transactions} setTransactions={setTransactions} displayName={displayName} appUsers={appUsers} isAdmin={isAdmin} analyticsRows={analyticsRows} analyticsFrom={analyticsFrom} analyticsTo={analyticsTo} analyticsStatus={analyticsStatus} raffles={raffles} raffleCountries={raffleCountries} budgetExtras={budgetExtras} setBudgetExtras={setBudgetExtras} vsActualRows={vsActualRows} setVsActualRows={setVsActualRows} vsActualFrom={vsActualFrom} setVsActualFrom={setVsActualFrom} vsActualTo={vsActualTo} setVsActualTo={setVsActualTo} vsActualStatus={vsActualStatus} setVsActualStatus={setVsActualStatus}/>}\n'
     '        {tab==="admin"     && isAdmin && <AdminTab appUsers={appUsers} setAppUsers={setAppUsers}/>}'
 )
 
@@ -4257,30 +4248,37 @@ function FinanceRequests({ products, allocs, appUsers, transactions, setTransact
 }
 
 // ── BUDGET VS ACTUAL ────────────────────────────────────────────────────────────
-function BudgetVsActual({ products, allocs, analyticsRows, analyticsFrom, analyticsTo, analyticsStatus }) {
-  const [localRows,   setLocalRows]   = useState(null);
-  const [localFrom,   setLocalFrom]   = useState(analyticsFrom);
-  const [localTo,     setLocalTo]     = useState(analyticsTo);
-  const [localStatus, setLocalStatus] = useState("idle");
-  const [errMsg,      setErrMsg]      = useState("");
+function BudgetVsActual({ products, allocs, raffles, analyticsRows, analyticsFrom, analyticsTo, analyticsStatus, vsActualRows, setVsActualRows, vsActualFrom, setVsActualFrom, vsActualTo, setVsActualTo, vsActualStatus, setVsActualStatus }) {
+  const [errMsg, setErrMsg] = useState("");
 
-  const rows   = localRows !== null ? localRows   : analyticsRows;
-  const from   = localRows !== null ? localFrom   : analyticsFrom;
-  const to     = localRows !== null ? localTo     : analyticsTo;
-  const status = localRows !== null ? localStatus : analyticsStatus;
+  const rows   = vsActualRows !== null ? vsActualRows   : analyticsRows;
+  const from   = vsActualRows !== null ? vsActualFrom   : analyticsFrom;
+  const to     = vsActualRows !== null ? vsActualTo     : analyticsTo;
+  const status = vsActualRows !== null ? vsActualStatus : analyticsStatus;
   const days   = Math.max(1, Math.round((new Date(to) - new Date(from)) / 86400000) + 1);
-  const usingDash = localRows === null && analyticsStatus === "done";
+  const usingDash = vsActualRows === null && analyticsStatus === "done";
 
   async function fetchLocal() {
-    setLocalStatus("loading"); setLocalRows([]); setErrMsg("");
+    setVsActualStatus("loading"); setVsActualRows([]); setErrMsg("");
     try {
-      const r = await fetch(`${PROXY_URL}?action=redash&from=${localFrom}&to=${localTo}`);
+      const r = await fetch(`${PROXY_URL}?action=redash&from=${vsActualFrom}&to=${vsActualTo}`);
       const d = await r.json();
       if (d.error) throw new Error(d.error);
-      setLocalRows(d.rows || []);
-      setLocalStatus("done");
-    } catch(e) { setErrMsg(e.message); setLocalStatus("error"); }
+      setVsActualRows(d.rows || []);
+      setVsActualStatus("done");
+    } catch(e) { setErrMsg(e.message); setVsActualStatus("error"); }
   }
+
+  // raffle monthly by vendor (plan = actual assumption)
+  const raffleByVendor = useMemo(() => {
+    const m = {};
+    (raffles||[]).forEach(r => {
+      const v = r.vendor || "Unknown";
+      if (!m[v]) m[v] = 0;
+      m[v] += (r.marketPrice||0) * (r.timesPerMonth||0);
+    });
+    return m;
+  }, [raffles]);
 
   const plannedByVendor = useMemo(() => {
     const m = {};
@@ -4319,8 +4317,11 @@ function BudgetVsActual({ products, allocs, analyticsRows, analyticsFrom, analyt
   const hasData = status === "done" && rows.length > 0;
   const inpS = {background:"#111",border:"1px solid #2a2a2a",borderRadius:8,color:"#f1f5f9",fontSize:13,padding:"8px 12px",outline:"none",fontFamily:"inherit"};
 
-  const totalPlanned = Object.values(plannedByVendor).reduce((s,v)=>s+v,0) * days;
-  const totalActual  = Object.values(actualByVendor).reduce((s,v)=>s+v,0);
+  const mpPlanned  = Object.values(plannedByVendor).reduce((s,v)=>s+v,0) * days;
+  const mpActual   = Object.values(actualByVendor).reduce((s,v)=>s+v,0);
+  const rafflePlanned = Object.values(raffleByVendor).reduce((s,v)=>s+v,0) / 30.5 * days;
+  const totalPlanned = mpPlanned + rafflePlanned;
+  const totalActual  = mpActual  + rafflePlanned; // raffles: plan = actual
   const totalGap     = totalActual - totalPlanned;
   const gapCol = g => g >= 0 ? "#4ade80" : Math.abs(g) < Math.abs(totalPlanned) * 0.2 ? "#fb923c" : "#f87171";
 
@@ -4334,15 +4335,15 @@ function BudgetVsActual({ products, allocs, analyticsRows, analyticsFrom, analyt
         )}
         <div>
           <div style={{fontSize:10,fontWeight:700,color:"#555",marginBottom:5,textTransform:"uppercase",letterSpacing:"0.07em"}}>From</div>
-          <input type="date" value={localFrom} onChange={e=>setLocalFrom(e.target.value)} style={inpS}/>
+          <input type="date" value={vsActualFrom} onChange={e=>setVsActualFrom(e.target.value)} style={inpS}/>
         </div>
         <div>
           <div style={{fontSize:10,fontWeight:700,color:"#555",marginBottom:5,textTransform:"uppercase",letterSpacing:"0.07em"}}>To</div>
-          <input type="date" value={localTo} onChange={e=>setLocalTo(e.target.value)} style={inpS}/>
+          <input type="date" value={vsActualTo} onChange={e=>setVsActualTo(e.target.value)} style={inpS}/>
         </div>
-        <button onClick={fetchLocal} disabled={localStatus==="loading"}
-          style={{background:"#c8ff00",color:"#0a0a0a",border:"none",borderRadius:8,padding:"10px 20px",fontSize:13,fontWeight:800,cursor:localStatus==="loading"?"not-allowed":"pointer",fontFamily:"inherit",opacity:localStatus==="loading"?0.6:1}}>
-          {localStatus==="loading"?"Loading...":localRows!==null?"↺ Refresh":"Fetch Data"}
+        <button onClick={fetchLocal} disabled={vsActualStatus==="loading"}
+          style={{background:"#c8ff00",color:"#0a0a0a",border:"none",borderRadius:8,padding:"10px 20px",fontSize:13,fontWeight:800,cursor:vsActualStatus==="loading"?"not-allowed":"pointer",fontFamily:"inherit",opacity:vsActualStatus==="loading"?0.6:1}}>
+          {vsActualStatus==="loading"?"Loading...":vsActualRows!==null?"↺ Refresh":"Fetch Data"}
         </button>
         {errMsg && <div style={{fontSize:12,color:"#f87171",alignSelf:"center"}}>{errMsg}</div>}
       </div>
@@ -4383,11 +4384,32 @@ function BudgetVsActual({ products, allocs, analyticsRows, analyticsFrom, analyt
                   </tr>
                 );
               })}
+              {Object.keys(raffleByVendor).length > 0 && (
+                <>
+                  <tr style={{borderTop:"2px solid #1e1e1e"}}>
+                    <td colSpan={6} style={{padding:"8px 16px",fontSize:10,fontWeight:700,color:"#a855f7",letterSpacing:"0.08em",textTransform:"uppercase",background:"rgba(168,85,247,0.04)"}}>Raffles (plan = actual)</td>
+                  </tr>
+                  {Object.entries(raffleByVendor).sort(([a],[b])=>a.localeCompare(b)).map(([v, monthly]) => {
+                    const pd = monthly / 30.5;
+                    const pt = pd * days;
+                    return (
+                      <tr key={"raffle-"+v} style={{borderBottom:"1px solid #111"}}>
+                        <td style={{padding:"11px 16px",fontWeight:700,color:"#f1f5f9"}}>{v}<span style={{marginLeft:6,fontSize:10,color:"#a855f7",fontWeight:600}}>Raffle</span></td>
+                        <td style={{padding:"11px 16px",color:"#888"}}>{usd(pd)}</td>
+                        <td style={{padding:"11px 16px",color:"#888"}}>{usd(pt)}</td>
+                        <td style={{padding:"11px 16px",fontWeight:700,color:"#f1f5f9"}}>{usd(pt)}</td>
+                        <td style={{padding:"11px 16px",fontWeight:700,color:"#4ade80"}}>+$0.00</td>
+                        <td style={{padding:"11px 16px",fontWeight:700,color:"#4ade80"}}>100%</td>
+                      </tr>
+                    );
+                  })}
+                </>
+              )}
             </tbody>
-            <tfoot><tr style={{background:"rgba(200,255,0,0.04)",borderTop:"1px solid rgba(200,255,0,0.15)"}}>
+            <tfoot><tr style={{background:"rgba(251,191,36,0.04)",borderTop:"2px solid rgba(251,191,36,0.2)"}}>
               <td colSpan={2} style={{padding:"11px 16px",fontWeight:900,color:"#555"}}>Total</td>
-              <td style={{padding:"11px 16px",fontWeight:900,color:G}}>{usd(totalPlanned)}</td>
-              <td style={{padding:"11px 16px",fontWeight:900,color:G}}>{usd(totalActual)}</td>
+              <td style={{padding:"11px 16px",fontWeight:900,color:TOTAL_C}}>{usd(totalPlanned)}</td>
+              <td style={{padding:"11px 16px",fontWeight:900,color:TOTAL_C}}>{usd(totalActual)}</td>
               <td style={{padding:"11px 16px",fontWeight:900,color:gapCol(totalGap)}}>{totalGap>=0?"+":""}{usd(totalGap)}</td>
               <td style={{padding:"11px 16px",fontWeight:900,color:totalPlanned>0?(totalActual/totalPlanned>=0.9?"#4ade80":totalActual/totalPlanned>=0.6?"#fb923c":"#f87171"):"#333"}}>
                 {totalPlanned>0?`${Math.round(totalActual/totalPlanned*100)}%`:"—"}
@@ -4401,7 +4423,7 @@ function BudgetVsActual({ products, allocs, analyticsRows, analyticsFrom, analyt
 }
 
 // ── BUDGET TAB ──────────────────────────────────────────────────────────────────
-function BudgetTab({ products, allocs, orders, setOrders, transactions, setTransactions, displayName, appUsers, isAdmin, analyticsRows, analyticsFrom, analyticsTo, analyticsStatus, raffles, raffleCountries, budgetExtras, setBudgetExtras }) {
+function BudgetTab({ products, allocs, orders, setOrders, transactions, setTransactions, displayName, appUsers, isAdmin, analyticsRows, analyticsFrom, analyticsTo, analyticsStatus, raffles, raffleCountries, budgetExtras, setBudgetExtras, vsActualRows, setVsActualRows, vsActualFrom, setVsActualFrom, vsActualTo, setVsActualTo, vsActualStatus, setVsActualStatus }) {
   const [sub, setSub] = useState("overview");
   const SUB = [
     { id:"overview",  label:"Budget Overview"   },
@@ -4422,7 +4444,7 @@ function BudgetTab({ products, allocs, orders, setOrders, transactions, setTrans
         ))}
       </div>
       {sub==="overview"  &&<BudgetOverview  products={products} allocs={allocs} raffles={raffles} raffleCountries={raffleCountries} budgetExtras={budgetExtras} setBudgetExtras={setBudgetExtras}/>}
-      {sub==="vs-actual" &&<BudgetVsActual  products={products} allocs={allocs} analyticsRows={analyticsRows} analyticsFrom={analyticsFrom} analyticsTo={analyticsTo} analyticsStatus={analyticsStatus}/>}
+      {sub==="vs-actual" &&<BudgetVsActual  products={products} allocs={allocs} raffles={raffles} analyticsRows={analyticsRows} analyticsFrom={analyticsFrom} analyticsTo={analyticsTo} analyticsStatus={analyticsStatus} vsActualRows={vsActualRows} setVsActualRows={setVsActualRows} vsActualFrom={vsActualFrom} setVsActualFrom={setVsActualFrom} vsActualTo={vsActualTo} setVsActualTo={setVsActualTo} vsActualStatus={vsActualStatus} setVsActualStatus={setVsActualStatus}/>}
       {sub==="orders"    &&<VendorOrders    products={products} allocs={allocs} orders={orders} setOrders={setOrders} transactions={transactions} setTransactions={setTransactions} displayName={displayName} isAdmin={isAdmin}/>}
       {sub==="finance"   &&<FinanceRequests products={products} allocs={allocs} appUsers={appUsers} transactions={transactions} setTransactions={setTransactions} displayName={displayName} isAdmin={isAdmin}/>}
     </div>
@@ -4510,6 +4532,11 @@ jsx = jsx.replace(
     '  const [analyticsStatus, setAnalyticsStatus] = useState("idle");\n'
     '  const [analyticsRows,   setAnalyticsRows]   = useState([]);\n'
     '  const [analyticsError,  setAnalyticsError]  = useState("");\n'
+    '\n'
+    '  const [vsActualRows,   setVsActualRows]   = useState(null);\n'
+    '  const [vsActualFrom,   setVsActualFrom]   = useState(firstOfMonth0);\n'
+    '  const [vsActualTo,     setVsActualTo]     = useState(today0);\n'
+    '  const [vsActualStatus, setVsActualStatus] = useState("idle");\n'
     '\n'
     '  const [isAdmin,      setIsAdmin]      = useState(()=>sessionStorage.getItem("buff_admin")==="1");\n'
     '  const [appUsers,     setAppUsers]     = useState(()=>{ try{return JSON.parse(localStorage.getItem("buff_appUsers"))||[];}catch{return[];} });\n'

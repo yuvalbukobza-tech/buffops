@@ -3098,14 +3098,6 @@ function CountriesTab({
         return p && (p.purpose || "MP") === pu;
       });
       if (!rows.length) return null;
-      const secPlanned = rows.reduce((s, r) => {
-        const p = products.find(x => x.id === r.productId);
-        return s + (p ? calcDailyBudget(p, r) : 0);
-      }, 0);
-      const secReal = rows.reduce((s, r) => {
-        const p = products.find(x => x.id === r.productId);
-        return s + (p ? calcRealDaily(p, r) : 0);
-      }, 0);
       return /*#__PURE__*/React.createElement("tbody", {
         key: pu
       }, /*#__PURE__*/React.createElement("tr", {
@@ -3128,48 +3120,7 @@ function CountriesTab({
           borderRadius: 4,
           letterSpacing: "0.05em"
         }
-      }, pu))), rows.map(renderRow), /*#__PURE__*/React.createElement("tr", {
-        style: {
-          borderTop: "1px solid #1a1a1a",
-          background: "#080808"
-        }
-      }, /*#__PURE__*/React.createElement("td", {
-        colSpan: 7,
-        style: {
-          padding: "8px 16px",
-          fontSize: 11,
-          color: "#444",
-          fontWeight: 700
-        }
-      }, pu, " subtotal"), /*#__PURE__*/React.createElement("td", {
-        style: {
-          padding: "8px 16px",
-          color: "#444",
-          fontWeight: 700,
-          fontSize: 11
-        }
-      }, usd(secPlanned)), /*#__PURE__*/React.createElement("td", {
-        style: {
-          padding: "8px 16px",
-          color: purposeColor(pu),
-          fontWeight: 800,
-          fontSize: 11
-        }
-      }, usd(secReal)), /*#__PURE__*/React.createElement("td", {
-        style: {
-          padding: "8px 16px",
-          color: "#444",
-          fontWeight: 700,
-          fontSize: 11
-        }
-      }, usd(secPlanned * 30.5)), /*#__PURE__*/React.createElement("td", {
-        style: {
-          padding: "8px 16px",
-          color: purposeColor(pu),
-          fontWeight: 800,
-          fontSize: 11
-        }
-      }, usd(secReal * 30.5))));
+      }, pu))), rows.map(renderRow));
     });
   })(), /*#__PURE__*/React.createElement("tfoot", null, /*#__PURE__*/React.createElement("tr", {
     style: {
@@ -11348,37 +11299,53 @@ function FinanceRequests({
 function BudgetVsActual({
   products,
   allocs,
+  raffles,
   analyticsRows,
   analyticsFrom,
   analyticsTo,
-  analyticsStatus
+  analyticsStatus,
+  vsActualRows,
+  setVsActualRows,
+  vsActualFrom,
+  setVsActualFrom,
+  vsActualTo,
+  setVsActualTo,
+  vsActualStatus,
+  setVsActualStatus
 }) {
-  const [localRows, setLocalRows] = useState(null);
-  const [localFrom, setLocalFrom] = useState(analyticsFrom);
-  const [localTo, setLocalTo] = useState(analyticsTo);
-  const [localStatus, setLocalStatus] = useState("idle");
   const [errMsg, setErrMsg] = useState("");
-  const rows = localRows !== null ? localRows : analyticsRows;
-  const from = localRows !== null ? localFrom : analyticsFrom;
-  const to = localRows !== null ? localTo : analyticsTo;
-  const status = localRows !== null ? localStatus : analyticsStatus;
+  const rows = vsActualRows !== null ? vsActualRows : analyticsRows;
+  const from = vsActualRows !== null ? vsActualFrom : analyticsFrom;
+  const to = vsActualRows !== null ? vsActualTo : analyticsTo;
+  const status = vsActualRows !== null ? vsActualStatus : analyticsStatus;
   const days = Math.max(1, Math.round((new Date(to) - new Date(from)) / 86400000) + 1);
-  const usingDash = localRows === null && analyticsStatus === "done";
+  const usingDash = vsActualRows === null && analyticsStatus === "done";
   async function fetchLocal() {
-    setLocalStatus("loading");
-    setLocalRows([]);
+    setVsActualStatus("loading");
+    setVsActualRows([]);
     setErrMsg("");
     try {
-      const r = await fetch(`${PROXY_URL}?action=redash&from=${localFrom}&to=${localTo}`);
+      const r = await fetch(`${PROXY_URL}?action=redash&from=${vsActualFrom}&to=${vsActualTo}`);
       const d = await r.json();
       if (d.error) throw new Error(d.error);
-      setLocalRows(d.rows || []);
-      setLocalStatus("done");
+      setVsActualRows(d.rows || []);
+      setVsActualStatus("done");
     } catch (e) {
       setErrMsg(e.message);
-      setLocalStatus("error");
+      setVsActualStatus("error");
     }
   }
+
+  // raffle monthly by vendor (plan = actual assumption)
+  const raffleByVendor = useMemo(() => {
+    const m = {};
+    (raffles || []).forEach(r => {
+      const v = r.vendor || "Unknown";
+      if (!m[v]) m[v] = 0;
+      m[v] += (r.marketPrice || 0) * (r.timesPerMonth || 0);
+    });
+    return m;
+  }, [raffles]);
   const plannedByVendor = useMemo(() => {
     const m = {};
     Object.values(allocs).forEach(cr => cr.forEach(alloc => {
@@ -11433,8 +11400,11 @@ function BudgetVsActual({
     outline: "none",
     fontFamily: "inherit"
   };
-  const totalPlanned = Object.values(plannedByVendor).reduce((s, v) => s + v, 0) * days;
-  const totalActual = Object.values(actualByVendor).reduce((s, v) => s + v, 0);
+  const mpPlanned = Object.values(plannedByVendor).reduce((s, v) => s + v, 0) * days;
+  const mpActual = Object.values(actualByVendor).reduce((s, v) => s + v, 0);
+  const rafflePlanned = Object.values(raffleByVendor).reduce((s, v) => s + v, 0) / 30.5 * days;
+  const totalPlanned = mpPlanned + rafflePlanned;
+  const totalActual = mpActual + rafflePlanned; // raffles: plan = actual
   const totalGap = totalActual - totalPlanned;
   const gapCol = g => g >= 0 ? "#4ade80" : Math.abs(g) < Math.abs(totalPlanned) * 0.2 ? "#fb923c" : "#f87171";
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
@@ -11471,8 +11441,8 @@ function BudgetVsActual({
     }
   }, "From"), /*#__PURE__*/React.createElement("input", {
     type: "date",
-    value: localFrom,
-    onChange: e => setLocalFrom(e.target.value),
+    value: vsActualFrom,
+    onChange: e => setVsActualFrom(e.target.value),
     style: inpS
   })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -11485,12 +11455,12 @@ function BudgetVsActual({
     }
   }, "To"), /*#__PURE__*/React.createElement("input", {
     type: "date",
-    value: localTo,
-    onChange: e => setLocalTo(e.target.value),
+    value: vsActualTo,
+    onChange: e => setVsActualTo(e.target.value),
     style: inpS
   })), /*#__PURE__*/React.createElement("button", {
     onClick: fetchLocal,
-    disabled: localStatus === "loading",
+    disabled: vsActualStatus === "loading",
     style: {
       background: "#c8ff00",
       color: "#0a0a0a",
@@ -11499,11 +11469,11 @@ function BudgetVsActual({
       padding: "10px 20px",
       fontSize: 13,
       fontWeight: 800,
-      cursor: localStatus === "loading" ? "not-allowed" : "pointer",
+      cursor: vsActualStatus === "loading" ? "not-allowed" : "pointer",
       fontFamily: "inherit",
-      opacity: localStatus === "loading" ? 0.6 : 1
+      opacity: vsActualStatus === "loading" ? 0.6 : 1
     }
-  }, localStatus === "loading" ? "Loading..." : localRows !== null ? "↺ Refresh" : "Fetch Data"), errMsg && /*#__PURE__*/React.createElement("div", {
+  }, vsActualStatus === "loading" ? "Loading..." : vsActualRows !== null ? "↺ Refresh" : "Fetch Data"), errMsg && /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 12,
       color: "#f87171",
@@ -11600,10 +11570,75 @@ function BudgetVsActual({
         color: "#333"
       }
     }, "\u2014")));
-  })), /*#__PURE__*/React.createElement("tfoot", null, /*#__PURE__*/React.createElement("tr", {
+  }), Object.keys(raffleByVendor).length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("tr", {
     style: {
-      background: "rgba(200,255,0,0.04)",
-      borderTop: "1px solid rgba(200,255,0,0.15)"
+      borderTop: "2px solid #1e1e1e"
+    }
+  }, /*#__PURE__*/React.createElement("td", {
+    colSpan: 6,
+    style: {
+      padding: "8px 16px",
+      fontSize: 10,
+      fontWeight: 700,
+      color: "#a855f7",
+      letterSpacing: "0.08em",
+      textTransform: "uppercase",
+      background: "rgba(168,85,247,0.04)"
+    }
+  }, "Raffles (plan = actual)")), Object.entries(raffleByVendor).sort(([a], [b]) => a.localeCompare(b)).map(([v, monthly]) => {
+    const pd = monthly / 30.5;
+    const pt = pd * days;
+    return /*#__PURE__*/React.createElement("tr", {
+      key: "raffle-" + v,
+      style: {
+        borderBottom: "1px solid #111"
+      }
+    }, /*#__PURE__*/React.createElement("td", {
+      style: {
+        padding: "11px 16px",
+        fontWeight: 700,
+        color: "#f1f5f9"
+      }
+    }, v, /*#__PURE__*/React.createElement("span", {
+      style: {
+        marginLeft: 6,
+        fontSize: 10,
+        color: "#a855f7",
+        fontWeight: 600
+      }
+    }, "Raffle")), /*#__PURE__*/React.createElement("td", {
+      style: {
+        padding: "11px 16px",
+        color: "#888"
+      }
+    }, usd(pd)), /*#__PURE__*/React.createElement("td", {
+      style: {
+        padding: "11px 16px",
+        color: "#888"
+      }
+    }, usd(pt)), /*#__PURE__*/React.createElement("td", {
+      style: {
+        padding: "11px 16px",
+        fontWeight: 700,
+        color: "#f1f5f9"
+      }
+    }, usd(pt)), /*#__PURE__*/React.createElement("td", {
+      style: {
+        padding: "11px 16px",
+        fontWeight: 700,
+        color: "#4ade80"
+      }
+    }, "+$0.00"), /*#__PURE__*/React.createElement("td", {
+      style: {
+        padding: "11px 16px",
+        fontWeight: 700,
+        color: "#4ade80"
+      }
+    }, "100%"));
+  }))), /*#__PURE__*/React.createElement("tfoot", null, /*#__PURE__*/React.createElement("tr", {
+    style: {
+      background: "rgba(251,191,36,0.04)",
+      borderTop: "2px solid rgba(251,191,36,0.2)"
     }
   }, /*#__PURE__*/React.createElement("td", {
     colSpan: 2,
@@ -11616,13 +11651,13 @@ function BudgetVsActual({
     style: {
       padding: "11px 16px",
       fontWeight: 900,
-      color: G
+      color: TOTAL_C
     }
   }, usd(totalPlanned)), /*#__PURE__*/React.createElement("td", {
     style: {
       padding: "11px 16px",
       fontWeight: 900,
-      color: G
+      color: TOTAL_C
     }
   }, usd(totalActual)), /*#__PURE__*/React.createElement("td", {
     style: {
@@ -11657,7 +11692,15 @@ function BudgetTab({
   raffles,
   raffleCountries,
   budgetExtras,
-  setBudgetExtras
+  setBudgetExtras,
+  vsActualRows,
+  setVsActualRows,
+  vsActualFrom,
+  setVsActualFrom,
+  vsActualTo,
+  setVsActualTo,
+  vsActualStatus,
+  setVsActualStatus
 }) {
   const [sub, setSub] = useState("overview");
   const SUB = [{
@@ -11707,10 +11750,19 @@ function BudgetTab({
   }), sub === "vs-actual" && /*#__PURE__*/React.createElement(BudgetVsActual, {
     products: products,
     allocs: allocs,
+    raffles: raffles,
     analyticsRows: analyticsRows,
     analyticsFrom: analyticsFrom,
     analyticsTo: analyticsTo,
-    analyticsStatus: analyticsStatus
+    analyticsStatus: analyticsStatus,
+    vsActualRows: vsActualRows,
+    setVsActualRows: setVsActualRows,
+    vsActualFrom: vsActualFrom,
+    setVsActualFrom: setVsActualFrom,
+    vsActualTo: vsActualTo,
+    setVsActualTo: setVsActualTo,
+    vsActualStatus: vsActualStatus,
+    setVsActualStatus: setVsActualStatus
   }), sub === "orders" && /*#__PURE__*/React.createElement(VendorOrders, {
     products: products,
     allocs: allocs,
@@ -11773,6 +11825,10 @@ function App() {
   const [analyticsStatus, setAnalyticsStatus] = useState("idle");
   const [analyticsRows, setAnalyticsRows] = useState([]);
   const [analyticsError, setAnalyticsError] = useState("");
+  const [vsActualRows, setVsActualRows] = useState(null);
+  const [vsActualFrom, setVsActualFrom] = useState(firstOfMonth0);
+  const [vsActualTo, setVsActualTo] = useState(today0);
+  const [vsActualStatus, setVsActualStatus] = useState("idle");
   const [isAdmin, setIsAdmin] = useState(() => sessionStorage.getItem("buff_admin") === "1");
   const [appUsers, setAppUsers] = useState(() => {
     try {
@@ -12338,7 +12394,15 @@ function App() {
     raffles: raffles,
     raffleCountries: raffleCountries,
     budgetExtras: budgetExtras,
-    setBudgetExtras: setBudgetExtras
+    setBudgetExtras: setBudgetExtras,
+    vsActualRows: vsActualRows,
+    setVsActualRows: setVsActualRows,
+    vsActualFrom: vsActualFrom,
+    setVsActualFrom: setVsActualFrom,
+    vsActualTo: vsActualTo,
+    setVsActualTo: setVsActualTo,
+    vsActualStatus: vsActualStatus,
+    setVsActualStatus: setVsActualStatus
   }), tab === "admin" && isAdmin && /*#__PURE__*/React.createElement(AdminTab, {
     appUsers: appUsers,
     setAppUsers: setAppUsers
