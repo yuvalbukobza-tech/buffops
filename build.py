@@ -60,7 +60,7 @@ OLD_PRODUCTS_TAB = '''function ProductsTab({ products, setProducts }) {
 
       <div style={{background:"#0d0d0d",border:"1px solid #1a1a1a",borderRadius:14,overflow:"hidden"}}>
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-          <thead><tr style={{borderBottom:"1px solid #1a1a1a"}}>{["Brand","Category","Price","USD","Vendor","Type","Demand","BP Reg.","BP Prem.","Disc.","After disc.",""].map(TH)}</tr></thead>
+          <thead><tr style={{borderBottom:"1px solid #1a1a1a"}}>{["Brand","Category","Price","USD","Provider","Type","Demand","BP Reg.","BP Prem.","Disc.","After disc.",""].map(TH)}</tr></thead>
           <tbody>
             {filtered.map(p=>{
               const {reg,prem}=calcPricesAfterDiscount(p);
@@ -97,11 +97,16 @@ OLD_PRODUCTS_TAB = '''function ProductsTab({ products, setProducts }) {
   );
 }'''
 
-NEW_PRODUCTS_TAB = '''function ProductsTab({ products, setProducts, allocs, setTab }) {
-  const [modal,        setModal]        = useState(null);
-  const [filterCat,    setFilterCat]    = useState("All");
-  const [filterBrand,  setFilterBrand]  = useState("All");
-  const [filterDemand, setFilterDemand] = useState("All");
+NEW_PRODUCTS_TAB = '''function ProductsTab({ products, setProducts, allocs, setTab, raffles, setRaffles, setAllocateMode }) {
+  const [subView,        setSubView]        = useState("mp");
+  const [modal,          setModal]          = useState(null);
+  const [filterCat,      setFilterCat]      = useState("All");
+  const [filterBrand,    setFilterBrand]    = useState("All");
+  const [filterDemand,   setFilterDemand]   = useState("All");
+  const [raffleModal,    setRaffleModal]    = useState(null);
+
+  const PURPOSES = ["MP","Buff Pass"];
+  const purposeColor = pu => pu==="MP"?G:pu==="Raffles"?"#a78bfa":"#38bdf8";
 
   const brands   = ["All",...Array.from(new Set(products.map(p=>p.brand))).sort()];
   const filtered = products.filter(p=>{
@@ -110,6 +115,12 @@ NEW_PRODUCTS_TAB = '''function ProductsTab({ products, setProducts, allocs, setT
     if(filterDemand!=="All" && p.demandLevel!==filterDemand) return false;
     return true;
   });
+
+  function saveRaffle(form) {
+    const parsed = { ...form, id: raffleModal==="add"?Date.now():raffleModal.id, marketPrice: parseFloat(form.marketPrice)||0, timesPerMonth: parseInt(form.timesPerMonth)||0 };
+    setRaffles(rs => raffleModal==="add" ? [...rs, parsed] : rs.map(r=>r.id===raffleModal.id?parsed:r));
+    setRaffleModal(null);
+  }
 
   // Countries allocated per product
   function getCountries(pid) {
@@ -147,6 +158,21 @@ NEW_PRODUCTS_TAB = '''function ProductsTab({ products, setProducts, allocs, setT
 
   return (
     <div>
+
+      {/* ── SUB-NAV ── */}
+      <div style={{display:"flex",gap:0,borderBottom:"1px solid #1a1a1a",marginBottom:28,marginTop:-8}}>
+        {[["mp","Marketplace Items"],["raffles","Raffles"]].map(([id,label])=>(
+          <button key={id} onClick={()=>setSubView(id)} style={{
+            background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",
+            padding:"14px 20px",fontSize:13,fontWeight:subView===id?800:500,
+            color:subView===id?(id==="raffles"?"#a78bfa":G):"#444",
+            borderBottom:subView===id?`2px solid ${id==="raffles"?"#a78bfa":G}`:"2px solid transparent",
+            marginBottom:"-1px",letterSpacing:"-0.01em",transition:"all 0.15s"
+          }}>{label}</button>
+        ))}
+      </div>
+
+      {subView === "mp" && (<div>
 
       {/* ── VISUALIZATION ── */}
       {products.length > 0 && (
@@ -228,7 +254,7 @@ NEW_PRODUCTS_TAB = '''function ProductsTab({ products, setProducts, allocs, setT
       {/* ── TABLE ── */}
       <div style={{background:"#0d0d0d",border:"1px solid #1a1a1a",borderRadius:14,overflow:"hidden"}}>
         <div style={{padding:"14px 20px",borderBottom:"1px solid #1a1a1a",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <span style={{fontSize:14,fontWeight:800,color:"#f1f5f9",letterSpacing:"-0.02em"}}>Product Catalogue</span>
+          <span style={{fontSize:14,fontWeight:800,color:"#f1f5f9",letterSpacing:"-0.02em"}}>Marketplace Items</span>
           <span style={{fontSize:12,color:"#444"}}>{filtered.length} product{filtered.length!==1?"s":""}</span>
         </div>
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
@@ -274,6 +300,54 @@ NEW_PRODUCTS_TAB = '''function ProductsTab({ products, setProducts, allocs, setT
         {filtered.length===0&&<div style={{padding:32,textAlign:"center",color:"#333",fontSize:13}}>No products match the selected filters.</div>}
       </div>
       {modal&&<Modal title={modal==="add"?"Add product":"Edit product"} onClose={()=>setModal(null)}><ProductForm initial={modal==="add"?null:modal} onSave={save} onClose={()=>setModal(null)}/></Modal>}
+
+      </div>)} {/* end subView==="mp" */}
+
+      {subView === "raffles" && (
+        <div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20}}>
+            <div>
+              <div style={{fontSize:18,fontWeight:900,color:"#f1f5f9",letterSpacing:"-0.02em",marginBottom:4}}>Raffles Catalogue</div>
+              <div style={{fontSize:12,color:"#555"}}>{(raffles||[]).length} raffle{(raffles||[]).length!==1?"s":""} configured</div>
+            </div>
+            <button onClick={()=>{ if(setAllocateMode) setAllocateMode("raffle"); setTab("allocate"); }} style={{background:"#a78bfa",border:"none",color:"#fff",borderRadius:8,padding:"10px 20px",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6}}><Icon.plus/> Add Raffle</button>
+          </div>
+          <div style={{background:"#0d0d0d",border:"1px solid #1a1a1a",borderRadius:14,overflow:"hidden"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+              <thead><tr style={{borderBottom:"1px solid #1a1a1a"}}>
+                {["Raffle Name","Vendor","Market Price","Times / Month","Monthly Cost",""].map((h,i)=>(
+                  <th key={i} style={{textAlign:"left",padding:"13px 16px",color:"#555",fontWeight:700,fontSize:11,letterSpacing:"0.05em",textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {(raffles||[]).map(r=>{
+                  const monthly=(r.marketPrice||0)*(r.timesPerMonth||0);
+                  return (
+                    <tr key={r.id} style={{borderBottom:"1px solid #111"}}>
+                      <td style={{padding:"14px 16px",fontWeight:800,color:"#f1f5f9"}}>{r.name}</td>
+                      <td style={{padding:"10px 16px",color:"#888"}}>{r.vendor}</td>
+                      <td style={{padding:"10px 16px",fontWeight:700,color:"#f1f5f9"}}>{usd(r.marketPrice||0)}</td>
+                      <td style={{padding:"10px 16px",textAlign:"center",color:"#a78bfa",fontWeight:700}}>{r.timesPerMonth||0}×/mo</td>
+                      <td style={{padding:"10px 16px",fontWeight:800,color:"#a78bfa"}}>{usd(monthly)}</td>
+                      <td style={{padding:"10px 16px"}}>
+                        <div style={{display:"flex",gap:6}}>
+                          <button onClick={()=>setRaffleModal(r)} style={{background:"#1a1a1a",border:"none",color:"#888",cursor:"pointer",padding:"5px 7px",borderRadius:6,display:"flex"}}><Icon.edit/></button>
+                          <button onClick={()=>{ if(window.confirm("Delete this raffle?")) setRaffles(rs=>rs.filter(x=>x.id!==r.id)); }} style={{background:"#1a1a1a",border:"none",color:"#ef4444",cursor:"pointer",padding:"5px 7px",borderRadius:6,display:"flex"}}><Icon.trash/></button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {(raffles||[]).length===0&&<div style={{padding:40,textAlign:"center",color:"#333",fontSize:13}}>No raffles yet. Click "Add Raffle" or use the <strong style={{color:"#a78bfa"}}>Allocate</strong> tab.</div>}
+          </div>
+          {raffleModal&&<Modal title={raffleModal==="add"?"Add Raffle":"Edit Raffle"} onClose={()=>setRaffleModal(null)}>
+            <RaffleProductForm initial={raffleModal==="add"?null:raffleModal} onSave={saveRaffle} onClose={()=>setRaffleModal(null)}/>
+          </Modal>}
+        </div>
+      )}
+
     </div>
   );
 }'''
@@ -570,6 +644,130 @@ jsx = jsx.replace(
 )
 
 # ══════════════════════════════════════════════════════════════════════════════
+# ALLOCATION FORM — Group allocated products table by Purpose
+# ══════════════════════════════════════════════════════════════════════════════
+jsx = jsx.replace(
+    '      {allocIds.length > 0 ? (\n'
+    '        <div style={{overflowX:"auto"}}>\n'
+    '          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>\n'
+    '            <thead><tr>{[TH("Product"),TH("Demand"),TH("Pulses/day"),TH("Qty/pulse"),TH("Daily Qty"),TH("Utilization"),THp("Planned Daily"),THr("Real Daily")]}<th style={{borderBottom:"1px solid #1a1a1a",width:36}}/></tr></thead>\n'
+    '            <tbody>\n'
+    '              {allocIds.map(pid=>{\n'
+    '                const p=products.find(x=>x.id===pid); if(!p) return null;\n'
+    '                const r=rows[pid];\n'
+    '                const dq=calcDailyQty(r);\n'
+    '                const db=calcDailyBudget(p,r);\n'
+    '                const ut=calcUtilization(p.demandLevel,r.pulsesPerDay);\n'
+    '                const rd=db*ut;\n'
+    '                const intervalH = r.pulsesPerDay > 0 ? (24/r.pulsesPerDay).toFixed(1) : "—";\n'
+    '                return (\n'
+    '                  <tr key={pid} style={{borderBottom:"1px solid #111"}}>\n'
+    '                    <td style={{padding:"10px 10px"}}>\n'
+    '                      <div style={{fontWeight:700,color:"#f1f5f9"}}>{p.brand}</div>\n'
+    '                      <div style={{fontSize:10,color:"#444",marginTop:2}}>{p.type} · {p.provider}</div>\n'
+    '                    </td>\n'
+    '                    <td style={{padding:"10px 10px"}}>\n'
+    '                      <span style={{fontSize:10,fontWeight:700,color:demandColor(p.demandLevel),background:demandBg(p.demandLevel),padding:"2px 7px",borderRadius:4,border:`1px solid ${demandColor(p.demandLevel)}33`}}>{p.demandLevel}</span>\n'
+    '                    </td>\n'
+    '                    <td style={{padding:"10px 10px"}}>\n'
+    '                      <div>\n'
+    '                        <input type="number" min={1} max={24} value={r.pulsesPerDay} onChange={e=>upd(pid,"pulsesPerDay",e.target.value)}\n'
+    '                          style={{...inputStyle,width:60,padding:"5px 8px",textAlign:"center"}}/>\n'
+    '                        <div style={{fontSize:9,color:"#444",marginTop:3}}>every {intervalH}h</div>\n'
+    '                      </div>\n'
+    '                    </td>\n'
+    '                    <td style={{padding:"10px 10px"}}>\n'
+    '                      <input type="number" min={1} value={r.qtyPerPulse} onChange={e=>upd(pid,"qtyPerPulse",e.target.value)}\n'
+    '                        style={{...inputStyle,width:60,padding:"5px 8px",textAlign:"center"}}/>\n'
+    '                    </td>\n'
+    '                    <td style={{padding:"10px 10px",fontWeight:800,color:"#f1f5f9",fontSize:14,textAlign:"center"}}>{dq}</td>\n'
+    '                    <td style={{padding:"10px 10px",minWidth:110}}><UtilBar util={ut}/></td>\n'
+    '                    <td style={{padding:"10px 10px",color:"#444",fontWeight:600}}>{usd(db)}</td>\n'
+    '                    <td style={{padding:"10px 10px",fontWeight:800,color:G}}>{usd(rd)}</td>\n'
+    '                    <td style={{padding:"10px 10px"}}>\n'
+    '                      <button onClick={()=>del(pid)} style={{background:"none",border:"none",color:"#ef4444",cursor:"pointer",padding:4,borderRadius:4,display:"flex"}}><Icon.trash/></button>\n'
+    '                    </td>\n'
+    '                  </tr>\n'
+    '                );\n'
+    '              })}\n'
+    '            </tbody>\n'
+    '          </table>\n'
+    '        </div>',
+
+    '      {allocIds.length > 0 ? (\n'
+    '        <div style={{overflowX:"auto"}}>\n'
+    '          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>\n'
+    '            <thead><tr>{[TH("Product"),TH("Demand"),TH("Pulses/day"),TH("Qty/pulse"),TH("Daily Qty"),TH("Utilization"),THp("Planned Daily"),THr("Real Daily")]}<th style={{borderBottom:"1px solid #1a1a1a",width:36}}/></tr></thead>\n'
+    '            {(()=>{\n'
+    '              const PURPOSES = ["MP","Raffles","Buff Pass"];\n'
+    '              const purposeColor = pu => pu==="MP"?G:pu==="Raffles"?"#a78bfa":"#38bdf8";\n'
+    '              const renderPid = pid => {\n'
+    '                const p=products.find(x=>x.id===pid); if(!p) return null;\n'
+    '                const r=rows[pid];\n'
+    '                const dq=calcDailyQty(r);\n'
+    '                const db=calcDailyBudget(p,r);\n'
+    '                const ut=calcUtilization(p.demandLevel,r.pulsesPerDay);\n'
+    '                const rd=db*ut;\n'
+    '                const intervalH = r.pulsesPerDay > 0 ? (24/r.pulsesPerDay).toFixed(1) : "—";\n'
+    '                return (\n'
+    '                  <tr key={pid} style={{borderBottom:"1px solid #111"}}>\n'
+    '                    <td style={{padding:"10px 10px"}}>\n'
+    '                      <div style={{fontWeight:700,color:"#f1f5f9"}}>{p.brand}</div>\n'
+    '                      <div style={{fontSize:10,color:"#444",marginTop:2}}>{p.type} · {p.provider}</div>\n'
+    '                    </td>\n'
+    '                    <td style={{padding:"10px 10px"}}>\n'
+    '                      <span style={{fontSize:10,fontWeight:700,color:demandColor(p.demandLevel),background:demandBg(p.demandLevel),padding:"2px 7px",borderRadius:4,border:`1px solid ${demandColor(p.demandLevel)}33`}}>{p.demandLevel}</span>\n'
+    '                    </td>\n'
+    '                    <td style={{padding:"10px 10px"}}>\n'
+    '                      <div>\n'
+    '                        <input type="number" min={1} max={24} value={r.pulsesPerDay} onChange={e=>upd(pid,"pulsesPerDay",e.target.value)}\n'
+    '                          style={{...inputStyle,width:60,padding:"5px 8px",textAlign:"center"}}/>\n'
+    '                        <div style={{fontSize:9,color:"#444",marginTop:3}}>every {intervalH}h</div>\n'
+    '                      </div>\n'
+    '                    </td>\n'
+    '                    <td style={{padding:"10px 10px"}}>\n'
+    '                      <input type="number" min={1} value={r.qtyPerPulse} onChange={e=>upd(pid,"qtyPerPulse",e.target.value)}\n'
+    '                        style={{...inputStyle,width:60,padding:"5px 8px",textAlign:"center"}}/>\n'
+    '                    </td>\n'
+    '                    <td style={{padding:"10px 10px",fontWeight:800,color:"#f1f5f9",fontSize:14,textAlign:"center"}}>{dq}</td>\n'
+    '                    <td style={{padding:"10px 10px",minWidth:110}}><UtilBar util={ut}/></td>\n'
+    '                    <td style={{padding:"10px 10px",color:"#444",fontWeight:600}}>{usd(db)}</td>\n'
+    '                    <td style={{padding:"10px 10px",fontWeight:800,color:G}}>{usd(rd)}</td>\n'
+    '                    <td style={{padding:"10px 10px"}}>\n'
+    '                      <button onClick={()=>del(pid)} style={{background:"none",border:"none",color:"#ef4444",cursor:"pointer",padding:4,borderRadius:4,display:"flex"}}><Icon.trash/></button>\n'
+    '                    </td>\n'
+    '                  </tr>\n'
+    '                );\n'
+    '              };\n'
+    '              return PURPOSES.map(pu=>{\n'
+    '                const pids=allocIds.filter(pid=>{ const p=products.find(x=>x.id===pid); return p&&(p.purpose||"MP")===pu; });\n'
+    '                if(!pids.length) return null;\n'
+    '                const puColor=purposeColor(pu);\n'
+    '                const secPlanned=pids.reduce((s,pid)=>{ const p=products.find(x=>x.id===pid); return s+(p?calcDailyBudget(p,rows[pid]):0); },0);\n'
+    '                const secReal=pids.reduce((s,pid)=>{ const p=products.find(x=>x.id===pid); return s+(p?calcDailyBudget(p,rows[pid])*calcUtilization(p.demandLevel,rows[pid].pulsesPerDay):0); },0);\n'
+    '                return (\n'
+    '                  <tbody key={pu}>\n'
+    '                    <tr style={{background:"#0a0a0a"}}>\n'
+    '                      <td colSpan={9} style={{padding:"7px 10px"}}>\n'
+    '                        <span style={{fontSize:10,fontWeight:800,color:puColor,background:`${puColor}18`,border:`1px solid ${puColor}44`,padding:"2px 10px",borderRadius:4,letterSpacing:"0.05em"}}>{pu}</span>\n'
+    '                      </td>\n'
+    '                    </tr>\n'
+    '                    {pids.map(renderPid)}\n'
+    '                    <tr style={{borderTop:"1px solid #1a1a1a",background:"#080808"}}>\n'
+    '                      <td colSpan={6} style={{padding:"7px 10px",fontSize:11,color:"#444",fontWeight:700}}>{pu} subtotal</td>\n'
+    '                      <td style={{padding:"7px 10px",color:"#444",fontWeight:700,fontSize:11}}>{usd(secPlanned)}</td>\n'
+    '                      <td style={{padding:"7px 10px",color:puColor,fontWeight:800,fontSize:11}}>{usd(secReal)}</td>\n'
+    '                      <td/>\n'
+    '                    </tr>\n'
+    '                  </tbody>\n'
+    '                );\n'
+    '              });\n'
+    '            })()}\n'
+    '          </table>\n'
+    '        </div>'
+)
+
+# ══════════════════════════════════════════════════════════════════════════════
 # DESIGN 6 — App logo + nav tabs + page padding
 # ══════════════════════════════════════════════════════════════════════════════
 jsx = jsx.replace(
@@ -613,6 +811,245 @@ jsx = jsx.replace(
 )
 
 # ══════════════════════════════════════════════════════════════════════════════
+# COUNTRIES — Split detail table by Purpose (MP / Raffles / Buff Pass)
+# ══════════════════════════════════════════════════════════════════════════════
+jsx = jsx.replace(
+    '                  <tbody>\n'
+    '                    {sel.rows.map(r=>{\n'
+    '                      const p=products.find(x=>x.id===r.productId); if(!p) return null;\n'
+    '                      const dq=calcDailyQty(r);\n'
+    '                      const db=calcDailyBudget(p,r);\n'
+    '                      const rd=calcRealDaily(p,r);\n'
+    '                      const ut=calcUtilization(p.demandLevel,r.pulsesPerDay);\n'
+    '                      const ivh=(r.pulsesPerDay>0?(24/r.pulsesPerDay).toFixed(1):"—")+"h";\n'
+    '                      return (\n'
+    '                        <tr key={r.productId} style={{borderBottom:"1px solid #0d0d0d"}}>\n'
+    '                          <td style={{padding:"10px 16px",fontWeight:800,color:"#f1f5f9"}}>{p.brand}<div style={{fontSize:10,color:"#333",marginTop:1}}>{p.type}</div></td>\n'
+    '                          <td style={{padding:"10px 16px"}}><span style={{fontSize:10,fontWeight:700,color:demandColor(p.demandLevel),background:demandBg(p.demandLevel),padding:"2px 6px",borderRadius:4,border:`1px solid ${demandColor(p.demandLevel)}33`}}>{p.demandLevel}</span></td>\n'
+    '                          <td style={{padding:"10px 16px",color:"#f1f5f9",fontWeight:700,textAlign:"center"}}>{r.pulsesPerDay}</td>\n'
+    '                          <td style={{padding:"10px 16px",color:"#f1f5f9",fontWeight:700,textAlign:"center"}}>{r.qtyPerPulse}</td>\n'
+    '                          <td style={{padding:"10px 16px",color:G,fontWeight:800,textAlign:"center",fontSize:14}}>{dq}</td>\n'
+    '                          <td style={{padding:"10px 16px",color:"#555",fontSize:11}}>{ivh}</td>\n'
+    '                          <td style={{padding:"10px 16px",minWidth:110}}><UtilBar util={ut}/></td>\n'
+    '                          <td style={{padding:"10px 16px",color:"#444",fontWeight:600}}>{usd(db)}</td>\n'
+    '                          <td style={{padding:"10px 16px",fontWeight:800,color:G}}>{usd(rd)}</td>\n'
+    '                          <td style={{padding:"10px 16px",color:"#444",fontWeight:600}}>{usd(db*30.5)}</td>\n'
+    '                          <td style={{padding:"10px 16px",fontWeight:800,color:G}}>{usd(rd*30.5)}</td>\n'
+    '                        </tr>\n'
+    '                      );\n'
+    '                    })}\n'
+    '                  </tbody>\n'
+    '                  <tfoot>\n'
+    '                    <tr style={{borderTop:"1px solid #222",background:"#080808"}}>\n'
+    '                      <td colSpan={7} style={{padding:"11px 16px",fontWeight:800,color:"#f1f5f9"}}>Total</td>\n'
+    '                      <td style={{padding:"11px 16px",fontWeight:700,color:"#444"}}>{usd(sel.planned)}</td>\n'
+    '                      <td style={{padding:"11px 16px",fontWeight:900,color:G}}>{usd(sel.real)}</td>\n'
+    '                      <td style={{padding:"11px 16px",fontWeight:700,color:"#444"}}>{usd(sel.plannedM)}</td>\n'
+    '                      <td style={{padding:"11px 16px",fontWeight:900,color:G}}>{usd(sel.realM)}</td>\n'
+    '                    </tr>\n'
+    '                  </tfoot>',
+
+    '                  {(()=>{\n'
+    '                    const PURPOSES = ["MP","Raffles","Buff Pass"];\n'
+    '                    const purposeColor = pu => pu==="MP"?G:pu==="Raffles"?"#a78bfa":"#38bdf8";\n'
+    '                    const renderRow = r => {\n'
+    '                      const p=products.find(x=>x.id===r.productId); if(!p) return null;\n'
+    '                      const dq=calcDailyQty(r);\n'
+    '                      const db=calcDailyBudget(p,r);\n'
+    '                      const rd=calcRealDaily(p,r);\n'
+    '                      const ut=calcUtilization(p.demandLevel,r.pulsesPerDay);\n'
+    '                      const ivh=(r.pulsesPerDay>0?(24/r.pulsesPerDay).toFixed(1):"—")+"h";\n'
+    '                      const pu=p.purpose||"MP";\n'
+    '                      return (\n'
+    '                        <tr key={r.productId} style={{borderBottom:"1px solid #0d0d0d"}}>\n'
+    '                          <td style={{padding:"10px 16px"}}>\n'
+    '                            <div style={{fontWeight:800,color:"#f1f5f9"}}>{p.brand}</div>\n'
+    '                            <div style={{fontSize:10,color:"#333",marginTop:1}}>{p.type}</div>\n'
+    '                          </td>\n'
+    '                          <td style={{padding:"10px 16px"}}><span style={{fontSize:10,fontWeight:700,color:demandColor(p.demandLevel),background:demandBg(p.demandLevel),padding:"2px 6px",borderRadius:4,border:`1px solid ${demandColor(p.demandLevel)}33`}}>{p.demandLevel}</span></td>\n'
+    '                          <td style={{padding:"10px 16px",color:"#f1f5f9",fontWeight:700,textAlign:"center"}}>{r.pulsesPerDay}</td>\n'
+    '                          <td style={{padding:"10px 16px",color:"#f1f5f9",fontWeight:700,textAlign:"center"}}>{r.qtyPerPulse}</td>\n'
+    '                          <td style={{padding:"10px 16px",color:G,fontWeight:800,textAlign:"center",fontSize:14}}>{dq}</td>\n'
+    '                          <td style={{padding:"10px 16px",color:"#555",fontSize:11}}>{ivh}</td>\n'
+    '                          <td style={{padding:"10px 16px",minWidth:110}}><UtilBar util={ut}/></td>\n'
+    '                          <td style={{padding:"10px 16px",color:"#444",fontWeight:600}}>{usd(db)}</td>\n'
+    '                          <td style={{padding:"10px 16px",fontWeight:800,color:G}}>{usd(rd)}</td>\n'
+    '                          <td style={{padding:"10px 16px",color:"#444",fontWeight:600}}>{usd(db*30.5)}</td>\n'
+    '                          <td style={{padding:"10px 16px",fontWeight:800,color:G}}>{usd(rd*30.5)}</td>\n'
+    '                        </tr>\n'
+    '                      );\n'
+    '                    };\n'
+    '                    return PURPOSES.map(pu=>{\n'
+    '                      const rows=sel.rows.filter(r=>{ const p=products.find(x=>x.id===r.productId); return p&&(p.purpose||"MP")===pu; });\n'
+    '                      if(!rows.length) return null;\n'
+    '                      const secPlanned=rows.reduce((s,r)=>{ const p=products.find(x=>x.id===r.productId); return s+(p?calcDailyBudget(p,r):0); },0);\n'
+    '                      const secReal=rows.reduce((s,r)=>{ const p=products.find(x=>x.id===r.productId); return s+(p?calcRealDaily(p,r):0); },0);\n'
+    '                      return (\n'
+    '                        <tbody key={pu}>\n'
+    '                          <tr style={{background:"#0a0a0a"}}>\n'
+    '                            <td colSpan={11} style={{padding:"8px 16px"}}>\n'
+    '                              <span style={{fontSize:10,fontWeight:800,color:purposeColor(pu),background:`${purposeColor(pu)}18`,border:`1px solid ${purposeColor(pu)}44`,padding:"2px 10px",borderRadius:4,letterSpacing:"0.05em"}}>{pu}</span>\n'
+    '                            </td>\n'
+    '                          </tr>\n'
+    '                          {rows.map(renderRow)}\n'
+    '                          <tr style={{borderTop:"1px solid #1a1a1a",background:"#080808"}}>\n'
+    '                            <td colSpan={7} style={{padding:"8px 16px",fontSize:11,color:"#444",fontWeight:700}}>{pu} subtotal</td>\n'
+    '                            <td style={{padding:"8px 16px",color:"#444",fontWeight:700,fontSize:11}}>{usd(secPlanned)}</td>\n'
+    '                            <td style={{padding:"8px 16px",color:purposeColor(pu),fontWeight:800,fontSize:11}}>{usd(secReal)}</td>\n'
+    '                            <td style={{padding:"8px 16px",color:"#444",fontWeight:700,fontSize:11}}>{usd(secPlanned*30.5)}</td>\n'
+    '                            <td style={{padding:"8px 16px",color:purposeColor(pu),fontWeight:800,fontSize:11}}>{usd(secReal*30.5)}</td>\n'
+    '                          </tr>\n'
+    '                        </tbody>\n'
+    '                      );\n'
+    '                    });\n'
+    '                  })()} \n'
+    '                  <tfoot>\n'
+    '                    <tr style={{borderTop:TOTAL_BD,background:TOTAL_BG}}>\n'
+    '                      <td colSpan={7} style={{padding:"11px 16px",fontWeight:800,color:TOTAL_C}}>Grand Total</td>\n'
+    '                      <td style={{padding:"11px 16px",fontWeight:700,color:"rgba(251,191,36,0.5)"}}>{usd(sel.planned)}</td>\n'
+    '                      <td style={{padding:"11px 16px",fontWeight:900,color:TOTAL_C}}>{usd(sel.real)}</td>\n'
+    '                      <td style={{padding:"11px 16px",fontWeight:700,color:"rgba(251,191,36,0.5)"}}>{usd(sel.plannedM)}</td>\n'
+    '                      <td style={{padding:"11px 16px",fontWeight:900,color:TOTAL_C}}>{usd(sel.realM)}</td>\n'
+    '                    </tr>\n'
+    '                  </tfoot>'
+)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# COUNTRIES — signature + raffles section
+# ══════════════════════════════════════════════════════════════════════════════
+jsx = jsx.replace(
+    'function CountriesTab({ products, allocs, setAllocs }) {',
+    'function CountriesTab({ products, allocs, setAllocs, raffles, raffleCountries, setRaffleCountries }) {'
+)
+
+jsx = jsx.replace(
+    '            )}\n'
+    '          </div>\n'
+    '        ) : (\n'
+    '          <div style={{background:"#0d0d0d",border:"1px solid #1a1a1a",borderRadius:14,padding:60,textAlign:"center",color:"#2a2a2a",fontSize:13}}>Select a country to view its allocations.</div>\n'
+    '        )}',
+
+    '            )}\n'
+    '            {(raffles&&raffles.length>0) && (\n'
+    '              <div style={{borderTop:"1px solid #1a1a1a"}}>\n'
+    '                <div style={{padding:"14px 20px",borderBottom:"1px solid #0d0d0d",display:"flex",justifyContent:"space-between",alignItems:"center"}}>\n'
+    '                  <span style={{fontSize:13,fontWeight:800,color:"#a78bfa",letterSpacing:"-0.01em"}}>Raffles</span>\n'
+    '                  <span style={{fontSize:12,color:"#444"}}>{(raffleCountries[sel.country]||[]).length} raffle{(raffleCountries[sel.country]||[]).length!==1?"s":""} assigned</span>\n'
+    '                </div>\n'
+    '                {(raffleCountries[sel.country]||[]).length > 0 ? (\n'
+    '                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>\n'
+    '                    <thead><tr style={{borderBottom:"1px solid #1a1a1a"}}>\n'
+    '                      {["Raffle Name","Vendor","Market Price","Times/Month","Monthly Cost",""].map((h,i)=>(\n'
+    '                        <th key={i} style={{textAlign:"left",padding:"10px 16px",color:"#555",fontWeight:700,fontSize:11,letterSpacing:"0.05em",textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>\n'
+    '                      ))}\n'
+    '                    </tr></thead>\n'
+    '                    <tbody>\n'
+    '                      {(raffleCountries[sel.country]||[]).map(rid=>{\n'
+    '                        const r=raffles.find(x=>x.id===rid); if(!r) return null;\n'
+    '                        const monthly=(r.marketPrice||0)*(r.timesPerMonth||0);\n'
+    '                        return (\n'
+    '                          <tr key={rid} style={{borderBottom:"1px solid #0d0d0d"}}>\n'
+    '                            <td style={{padding:"10px 16px",fontWeight:700,color:"#f1f5f9"}}>{r.name}</td>\n'
+    '                            <td style={{padding:"10px 16px",color:"#888"}}>{r.vendor}</td>\n'
+    '                            <td style={{padding:"10px 16px",fontWeight:700,color:"#f1f5f9"}}>{usd(r.marketPrice||0)}</td>\n'
+    '                            <td style={{padding:"10px 16px",textAlign:"center",color:"#a78bfa",fontWeight:700}}>{r.timesPerMonth||0}×/mo</td>\n'
+    '                            <td style={{padding:"10px 16px",fontWeight:800,color:"#a78bfa"}}>{usd(monthly)}</td>\n'
+    '                            <td style={{padding:"10px 16px"}}>\n'
+    '                              <button onClick={()=>setRaffleCountries(prev=>({...prev,[sel.country]:(prev[sel.country]||[]).filter(x=>x!==rid)}))} style={{background:"none",border:"none",color:"#ef4444",cursor:"pointer",padding:4,borderRadius:4,display:"flex"}}><Icon.trash/></button>\n'
+    '                            </td>\n'
+    '                          </tr>\n'
+    '                        );\n'
+    '                      })}\n'
+    '                    </tbody>\n'
+    '                    <tfoot>\n'
+    '                      <tr style={{borderTop:TOTAL_BD,background:TOTAL_BG}}>\n'
+    '                        <td colSpan={4} style={{padding:"10px 16px",fontWeight:700,color:TOTAL_C,fontSize:11}}>Monthly Raffle Total</td>\n'
+    '                        <td style={{padding:"10px 16px",fontWeight:900,color:TOTAL_C}}>{usd((raffleCountries[sel.country]||[]).reduce((s,rid)=>{const r=raffles.find(x=>x.id===rid);return s+(r?(r.marketPrice||0)*(r.timesPerMonth||0):0);},0))}</td>\n'
+    '                        <td/>\n'
+    '                      </tr>\n'
+    '                    </tfoot>\n'
+    '                  </table>\n'
+    '                ) : (\n'
+    '                  <div style={{padding:"24px 20px",textAlign:"center",color:"#333",fontSize:12}}>No raffles assigned to this country yet. Use the <strong style={{color:"#a78bfa"}}>Allocate</strong> tab to add raffles.</div>\n'
+    '                )}\n'
+    '              </div>\n'
+    '            )}\n'
+    '          </div>\n'
+    '        ) : (\n'
+    '          <div style={{background:"#0d0d0d",border:"1px solid #1a1a1a",borderRadius:14,padding:60,textAlign:"center",color:"#2a2a2a",fontSize:13}}>Select a country to view its allocations.</div>\n'
+    '        )}'
+)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ALLOCATION FORM — add raffle props + raffle editing section
+# ══════════════════════════════════════════════════════════════════════════════
+
+# 1. Expand AllocationForm signature
+jsx = jsx.replace(
+    'function AllocationForm({ country, products, existing, onSave, onClose }) {',
+    'function AllocationForm({ country, products, existing, onSave, onClose, raffles, raffleCountries, setRaffleCountries }) {'
+)
+
+# 2. Add raffle selection state after selProd state
+jsx = jsx.replace(
+    '  const [selProd, setSelProd] = useState("");',
+    '  const [selProd, setSelProd] = useState("");\n'
+    '  const [selRaffles, setSelRaffles] = useState(()=>new Set((raffleCountries&&raffleCountries[country])||[]));\n'
+    '  const toggleRaffle = rid => setSelRaffles(prev=>{ const s=new Set(prev); s.has(rid)?s.delete(rid):s.add(rid); return s; });'
+)
+
+# 3. Replace save button to also save raffle selections + add raffle section above
+jsx = jsx.replace(
+    '      <div style={{display:"flex",justifyContent:"flex-end",gap:10,marginTop:20}}>\n'
+    '        <Btn variant="ghost" onClick={onClose}>Cancel</Btn>\n'
+    '        <Btn variant="primary" onClick={()=>onSave(allocIds.map(pid=>({productId:pid,pulsesPerDay:rows[pid].pulsesPerDay,qtyPerPulse:rows[pid].qtyPerPulse})))}>',
+    '      {raffles&&raffles.length>0&&(\n'
+    '        <div style={{marginTop:20,borderTop:"1px solid #1a1a1a",paddingTop:16}}>\n'
+    '          <div style={{fontSize:12,fontWeight:800,color:"#a78bfa",marginBottom:10,letterSpacing:"0.04em",textTransform:"uppercase"}}>Raffle Assignments</div>\n'
+    '          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:8}}>\n'
+    '            {raffles.map(r=>(\n'
+    '              <label key={r.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:selRaffles.has(r.id)?"rgba(167,139,250,0.08)":"#111",border:`1px solid ${selRaffles.has(r.id)?"rgba(167,139,250,0.4)":"#1a1a1a"}`,borderRadius:8,cursor:"pointer",transition:"all 0.15s"}}>\n'
+    '                <input type="checkbox" checked={selRaffles.has(r.id)} onChange={()=>toggleRaffle(r.id)} style={{accentColor:"#a78bfa",width:14,height:14,cursor:"pointer",flexShrink:0}}/>\n'
+    '                <div style={{minWidth:0}}>\n'
+    '                  <div style={{fontSize:12,fontWeight:700,color:"#f1f5f9",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.name}</div>\n'
+    '                  <div style={{fontSize:10,color:"#555",marginTop:1}}>{r.vendor||""} · {usd((r.marketPrice||0)*(r.timesPerMonth||0))}/mo</div>\n'
+    '                </div>\n'
+    '              </label>\n'
+    '            ))}\n'
+    '          </div>\n'
+    '        </div>\n'
+    '      )}\n'
+    '      <div style={{display:"flex",justifyContent:"flex-end",gap:10,marginTop:20}}>\n'
+    '        <Btn variant="ghost" onClick={onClose}>Cancel</Btn>\n'
+    '        <Btn variant="primary" onClick={()=>{ if(setRaffleCountries) setRaffleCountries(prev=>({...prev,[country]:[...selRaffles]})); onSave(allocIds.map(pid=>({productId:pid,pulsesPerDay:rows[pid].pulsesPerDay,qtyPerPulse:rows[pid].qtyPerPulse})));}}>'
+)
+
+# 4. Pass raffle props to AllocationForm in CountriesTab modal
+jsx = jsx.replace(
+    '          <AllocationForm country={sel.country} products={products} existing={sel.rows}\n'
+    '            onSave={rows=>{ setAllocs(a=>({...a,[sel.country]:rows})); setModal(false); }} onClose={()=>setModal(false)}/>',
+    '          <AllocationForm country={sel.country} products={products} existing={sel.rows}\n'
+    '            raffles={raffles} raffleCountries={raffleCountries} setRaffleCountries={setRaffleCountries}\n'
+    '            onSave={rows=>{ setAllocs(a=>({...a,[sel.country]:rows})); setModal(false); }} onClose={()=>setModal(false)}/>'
+)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PURPOSE / UI FIXES
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Edit Allocations button — neutral color (not green, to avoid confusion)
+jsx = jsx.replace(
+    '              <Btn variant="primary" small onClick={()=>setModal(true)}><Icon.edit/> Edit Allocations</Btn>',
+    '              <button onClick={()=>setModal(true)} style={{background:"#1a1a1a",border:"1px solid #2a2a2a",color:"#f1f5f9",borderRadius:8,padding:"7px 16px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6}}><Icon.edit/> Edit Allocations</button>'
+)
+
+# Raffles section header — use badge pill matching MP group header style
+jsx = jsx.replace(
+    '                  <span style={{fontSize:13,fontWeight:800,color:"#a78bfa",letterSpacing:"-0.01em"}}>Raffles</span>\n',
+    '                  <span style={{fontSize:11,fontWeight:800,color:"#a78bfa",background:"rgba(167,139,250,0.12)",border:"1px solid rgba(167,139,250,0.3)",padding:"3px 12px",borderRadius:4,letterSpacing:"0.05em",textTransform:"uppercase"}}>Raffles</span>\n'
+)
+
+# ══════════════════════════════════════════════════════════════════════════════
 # STRUCTURE 2 — App: update tabs + renders (no floating button)
 # ══════════════════════════════════════════════════════════════════════════════
 jsx = jsx.replace(
@@ -625,8 +1062,8 @@ jsx = jsx.replace(
     '    { id:"dashboard",  label:"Dashboard",  Icon:Icon.dashboard },\n'
     '    { id:"products",   label:"Products",   Icon:Icon.products  },\n'
     '    { id:"countries",  label:"Countries",  Icon:Icon.countries },\n'
-    '    { id:"allocate",   label:"Allocate",   Icon:Icon.allocate  },\n'
     '    { id:"budget",     label:"Budget",     Icon:Icon.budget    },\n'
+    '    { id:"allocate",   label:"Allocate",   Icon:Icon.allocate  },\n'
     '    ...(isAdmin ? [{ id:"admin", label:"Admin", Icon:Icon.admin }] : []),\n'
     '  ];'
 )
@@ -636,10 +1073,10 @@ jsx = jsx.replace(
     '        {tab==="products"  && <ProductsTab  products={products} setProducts={setProducts}/>}\n'
     '        {tab==="countries" && <CountriesTab products={products} allocs={allocs} setAllocs={setAllocs}/>}',
     '        {tab==="dashboard" && <DashboardTab products={products} allocs={allocs} dateFrom={analyticsFrom} setDateFrom={setAnalyticsFrom} dateTo={analyticsTo} setDateTo={setAnalyticsTo} status={analyticsStatus} setStatus={setAnalyticsStatus} realRows={analyticsRows} setRealRows={setAnalyticsRows} errorMsg={analyticsError} setErrorMsg={setAnalyticsError}/>}\n'
-    '        {tab==="products"  && <ProductsTab  products={products} setProducts={setProducts} allocs={allocs} setTab={setTab}/>}\n'
-    '        {tab==="countries" && <CountriesTab products={products} allocs={allocs} setAllocs={setAllocs}/>}\n'
-    '        {tab==="allocate"  && <AllocateTab  products={products} allocs={allocs} setProducts={setProducts} setAllocs={setAllocs}/>}\n'
-    '        {tab==="budget"    && <BudgetTab    products={products} allocs={allocs} orders={orders} setOrders={setOrders} transactions={transactions} setTransactions={setTransactions} displayName={displayName} appUsers={appUsers} isAdmin={isAdmin} analyticsRows={analyticsRows} analyticsFrom={analyticsFrom} analyticsTo={analyticsTo} analyticsStatus={analyticsStatus}/>}\n'
+    '        {tab==="products"  && <ProductsTab  products={products} setProducts={setProducts} allocs={allocs} setTab={setTab} raffles={raffles} setRaffles={setRaffles} setAllocateMode={setAllocateMode}/>}\n'
+    '        {tab==="countries" && <CountriesTab products={products} allocs={allocs} setAllocs={setAllocs} raffles={raffles} raffleCountries={raffleCountries} setRaffleCountries={setRaffleCountries}/>}\n'
+    '        {tab==="allocate"  && <AllocateTab  products={products} allocs={allocs} setProducts={setProducts} setAllocs={setAllocs} raffles={raffles} setRaffles={setRaffles} raffleCountries={raffleCountries} setRaffleCountries={setRaffleCountries} defaultMode={allocateMode}/>}\n'
+    '        {tab==="budget"    && <BudgetTab    products={products} allocs={allocs} orders={orders} setOrders={setOrders} transactions={transactions} setTransactions={setTransactions} displayName={displayName} appUsers={appUsers} isAdmin={isAdmin} analyticsRows={analyticsRows} analyticsFrom={analyticsFrom} analyticsTo={analyticsTo} analyticsStatus={analyticsStatus} raffles={raffles} raffleCountries={raffleCountries} budgetExtras={budgetExtras} setBudgetExtras={setBudgetExtras}/>}\n'
     '        {tab==="admin"     && isAdmin && <AdminTab appUsers={appUsers} setAppUsers={setAppUsers}/>}'
 )
 
@@ -683,9 +1120,156 @@ function StepIndicator({ step }) {
   );
 }
 
+// ── RAFFLE PRODUCT FORM (edit existing raffle from Products tab) ──────────────
+
+function RaffleProductForm({ initial, onSave, onClose }) {
+  const BLANK = { name:"", vendor:"GCOW", marketPrice:"", timesPerMonth:"" };
+  const [form, setForm] = useState(initial
+    ? { ...initial, marketPrice: String(initial.marketPrice||""), timesPerMonth: String(initial.timesPerMonth||"") }
+    : BLANK);
+  const set = (k,v) => setForm(p=>({...p,[k]:v}));
+  const monthly = (parseFloat(form.marketPrice)||0) * (parseInt(form.timesPerMonth)||0);
+  const valid = form.name.trim() && parseFloat(form.marketPrice) > 0;
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+      <Field label="Raffle Name"><Input value={form.name} onChange={e=>set("name",e.target.value)} placeholder="e.g. $50 Amazon Gift Card Raffle"/></Field>
+      <Field label="Vendor"><Select value={form.vendor} onChange={e=>set("vendor",e.target.value)}>{VENDORS.map(v=><option key={v}>{v}</option>)}</Select></Field>
+      <Field label="Market Price (USD)"><Input type="number" value={form.marketPrice} onChange={e=>set("marketPrice",e.target.value)} placeholder="e.g. 50"/></Field>
+      <Field label="Times per Month"><Input type="number" value={form.timesPerMonth} onChange={e=>set("timesPerMonth",e.target.value)} placeholder="e.g. 4"/></Field>
+      {monthly > 0 && (
+        <div style={{padding:"12px 16px",background:"rgba(167,139,250,0.06)",border:"1px solid rgba(167,139,250,0.2)",borderRadius:10,fontSize:13,color:"#a78bfa",fontWeight:700}}>
+          Monthly cost: {usd(monthly)}
+        </div>
+      )}
+      <div style={{ display:"flex", justifyContent:"flex-end", gap:10, marginTop:8 }}>
+        <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
+        <Btn variant="primary" onClick={()=>onSave(form)} disabled={!valid}>Save Raffle</Btn>
+      </div>
+    </div>
+  );
+}
+
+// ── RAFFLE ALLOCATE FORM (create + assign raffles from Allocate tab) ──────────
+
+function RaffleAllocateForm({ raffles, setRaffles, raffleCountries, setRaffleCountries }) {
+  const BLANK = { name:"", vendor:"GCOW", marketPrice:"", timesPerMonth:"" };
+  const [form,      setFormR]   = useState(BLANK);
+  const [selectedC, setSelectedC] = useState([]);
+  const [submitted, setSubmitted] = useState(null);
+  const set = (k,v) => setFormR(p=>({...p,[k]:v}));
+  const monthly = (parseFloat(form.marketPrice)||0) * (parseInt(form.timesPerMonth)||0);
+  const valid = form.name.trim() && parseFloat(form.marketPrice) > 0 && parseInt(form.timesPerMonth) > 0;
+
+  function toggleC(c) { setSelectedC(s => s.includes(c) ? s.filter(x=>x!==c) : [...s,c]); }
+  function toggleAll() { setSelectedC(s => s.length===COUNTRIES.length ? [] : [...COUNTRIES]); }
+
+  function handleSubmit() {
+    const id = Date.now();
+    const raffle = { id, name: form.name.trim(), vendor: form.vendor, marketPrice: parseFloat(form.marketPrice)||0, timesPerMonth: parseInt(form.timesPerMonth)||0 };
+    setRaffles(rs => [...rs, raffle]);
+    setRaffleCountries(prev => {
+      const next = {...prev};
+      selectedC.forEach(c => { next[c] = [...(next[c]||[]), id]; });
+      return next;
+    });
+    setSubmitted({ name: form.name.trim(), countries: selectedC.length });
+    setFormR(BLANK); setSelectedC([]);
+  }
+
+  function handleReset() {
+    if (window.confirm("Clear form?")) { setFormR(BLANK); setSelectedC([]); setSubmitted(null); }
+  }
+
+  if (submitted) {
+    return (
+      <div style={{ maxWidth:600, margin:"60px auto", textAlign:"center" }}>
+        <div style={{ width:72, height:72, borderRadius:"50%", background:"rgba(167,139,250,0.08)", border:"2px solid rgba(167,139,250,0.35)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:30, margin:"0 auto 20px", color:"#a78bfa" }}>✓</div>
+        <div style={{ fontSize:26, fontWeight:900, color:"#f1f5f9", marginBottom:10 }}>Raffle Created!</div>
+        <div style={{ fontSize:14, color:"#555", marginBottom:32 }}>
+          <strong style={{color:"#f1f5f9"}}>{submitted.name}</strong> has been added
+          {submitted.countries > 0 && <> and assigned to <strong style={{color:"#a78bfa"}}>{submitted.countries}</strong> countr{submitted.countries===1?"y":"ies"}</>}.
+        </div>
+        <div style={{ display:"flex", gap:12, justifyContent:"center" }}>
+          <button onClick={()=>setSubmitted(null)} style={{background:"#a78bfa",border:"none",color:"#fff",borderRadius:8,padding:"10px 22px",fontSize:13,fontWeight:800,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6}}>
+            <Icon.plus/> Create Another
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ maxWidth:920, margin:"0 auto" }}>
+      <div style={{ marginBottom:32, display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+        <div>
+          <div style={{ fontSize:26, fontWeight:900, color:"#f1f5f9", letterSpacing:"-0.03em" }}>Add New Raffle</div>
+          <div style={{ fontSize:14, color:"#555", marginTop:6 }}>Configure a raffle and assign it to markets</div>
+        </div>
+        <Btn variant="ghost" onClick={handleReset}>Reset</Btn>
+      </div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:24 }}>
+
+        {/* Left: form fields + preview */}
+        <div style={{ background:"#0d0d0d", border:"1px solid #1a1a1a", borderRadius:16, padding:32 }}>
+          <div style={{ fontSize:11, fontWeight:800, color:"#a78bfa", letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:20, paddingBottom:10, borderBottom:"1px solid #1a1a1a" }}>Raffle Details</div>
+          <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+            <Field label="Raffle Name"><Input value={form.name} onChange={e=>set("name",e.target.value)} placeholder="e.g. $50 Amazon Gift Card Raffle"/></Field>
+            <Field label="Vendor" hint="Who we purchase this raffle from"><Select value={form.vendor} onChange={e=>set("vendor",e.target.value)}>{VENDORS.map(v=><option key={v}>{v}</option>)}</Select></Field>
+            <Field label="Market Price (USD)" hint="Current market value of the raffle prize"><Input type="number" value={form.marketPrice} onChange={e=>set("marketPrice",e.target.value)} placeholder="e.g. 50"/></Field>
+            <Field label="Times per Month" hint="How many times this raffle runs per month"><Input type="number" value={form.timesPerMonth} onChange={e=>set("timesPerMonth",e.target.value)} placeholder="e.g. 4"/></Field>
+          </div>
+          {monthly > 0 && (
+            <div style={{ marginTop:24, padding:"16px 20px", background:"rgba(167,139,250,0.06)", border:"1px solid rgba(167,139,250,0.2)", borderRadius:12 }}>
+              <div style={{ fontSize:9, color:"rgba(167,139,250,0.6)", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Monthly Cost Preview</div>
+              <div style={{ fontSize:28, fontWeight:900, color:"#a78bfa", letterSpacing:"-0.03em" }}>{usd(monthly)}</div>
+              <div style={{ fontSize:11, color:"#555", marginTop:4 }}>{usd(parseFloat(form.marketPrice)||0)} × {form.timesPerMonth} runs/mo</div>
+            </div>
+          )}
+        </div>
+
+        {/* Right: country selection */}
+        <div style={{ background:"#0d0d0d", border:"1px solid #1a1a1a", borderRadius:16, padding:32 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20, paddingBottom:10, borderBottom:"1px solid #1a1a1a" }}>
+            <div style={{ fontSize:11, fontWeight:800, color:"#a78bfa", letterSpacing:"0.08em", textTransform:"uppercase" }}>Countries</div>
+            <button onClick={toggleAll} style={{ background:"none", border:"1px solid #2a2a2a", color:"#555", borderRadius:6, padding:"4px 10px", fontSize:11, cursor:"pointer", fontFamily:"inherit" }}>
+              {selectedC.length===COUNTRIES.length?"Deselect All":"Select All"}
+            </button>
+          </div>
+          <div style={{ display:"flex", flexDirection:"column", gap:5, maxHeight:340, overflowY:"auto" }}>
+            {COUNTRIES.map(c=>{
+              const isSel = selectedC.includes(c);
+              return (
+                <div key={c} onClick={()=>toggleC(c)} style={{ display:"flex", alignItems:"center", gap:12, padding:"9px 12px", borderRadius:8, cursor:"pointer", background:isSel?"rgba(167,139,250,0.06)":"transparent", border:`1px solid ${isSel?"rgba(167,139,250,0.25)":"transparent"}` }}>
+                  <div style={{ width:17, height:17, borderRadius:4, border:`2px solid ${isSel?"#a78bfa":"#2a2a2a"}`, background:isSel?"#a78bfa":"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                    {isSel && <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                  </div>
+                  <span style={{ fontSize:13, fontWeight:isSel?700:400, color:isSel?"#f1f5f9":"#555" }}>{c}</span>
+                </div>
+              );
+            })}
+          </div>
+          {selectedC.length > 0 && (
+            <div style={{ marginTop:14, padding:"9px 12px", background:"rgba(167,139,250,0.06)", border:"1px solid rgba(167,139,250,0.2)", borderRadius:8, fontSize:12, color:"#a78bfa", fontWeight:700 }}>
+              {selectedC.length} countr{selectedC.length===1?"y":"ies"} selected
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={{ display:"flex", justifyContent:"flex-end", marginTop:24 }}>
+        <button onClick={handleSubmit} disabled={!valid} style={{ background:valid?"#a78bfa":"#2a2a2a", border:"none", color:valid?"#fff":"#555", borderRadius:8, padding:"11px 28px", fontSize:14, fontWeight:800, cursor:valid?"pointer":"not-allowed", fontFamily:"inherit" }}>
+          {selectedC.length > 0 ? `Create & Assign to ${selectedC.length} Countr${selectedC.length===1?"y":"ies"}` : "Create Raffle (no assignment)"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── ALLOCATE TAB (full-page 3-step wizard) ────────────────────────────────────
 
-function AllocateTab({ products, allocs, setProducts, setAllocs }) {
+function AllocateTab({ products, allocs, setProducts, setAllocs, raffles, setRaffles, raffleCountries, setRaffleCountries, defaultMode }) {
+  const [mode, setMode] = useState(defaultMode||"mp");
   const BLANK = {
     brand:"", category:"Gaming", priceToBuffLocal:"", currency:"USD",
     type:"Regular", bpRegular:"", bpPremium:"",
@@ -837,7 +1421,23 @@ function AllocateTab({ products, allocs, setProducts, setAllocs }) {
   }
 
   return (
-    <div style={{ maxWidth:920, margin:"0 auto" }}>
+    <div>
+      {/* ── MODE TOGGLE ── */}
+      <div style={{ display:"flex", gap:0, borderBottom:"1px solid #1a1a1a", marginBottom:36, marginTop:-8 }}>
+        {[["mp","Marketplace Item"],["raffle","Raffle"]].map(([id,label])=>(
+          <button key={id} onClick={()=>setMode(id)} style={{
+            background:"none", border:"none", cursor:"pointer", fontFamily:"inherit",
+            padding:"14px 24px", fontSize:13, fontWeight:mode===id?800:500,
+            color:mode===id?(id==="raffle"?"#a78bfa":G):"#444",
+            borderBottom:mode===id?`2px solid ${id==="raffle"?"#a78bfa":G}`:"2px solid transparent",
+            marginBottom:"-1px", letterSpacing:"-0.01em", transition:"all 0.15s"
+          }}>{label}</button>
+        ))}
+      </div>
+
+      {mode === "raffle" && <RaffleAllocateForm raffles={raffles} setRaffles={setRaffles} raffleCountries={raffleCountries} setRaffleCountries={setRaffleCountries}/>}
+
+      {mode === "mp" && <div style={{ maxWidth:920, margin:"0 auto" }}>
       {/* Header */}
       <div style={{ marginBottom:32, display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
         <div>
@@ -878,11 +1478,6 @@ function AllocateTab({ products, allocs, setProducts, setAllocs }) {
             <Field label="Vendor" hint="Who we purchase this product from">
               <Select value={f.vendor||"GCOW"} onChange={e=>set("vendor",e.target.value)}>
                 {VENDORS.map(v=><option key={v}>{v}</option>)}
-              </Select>
-            </Field>
-            <Field label="Purpose" hint="MP = Marketplace, Raffles, Buff Pass">
-              <Select value={f.purpose||"MP"} onChange={e=>set("purpose",e.target.value)}>
-                {PURPOSES.map(p=><option key={p}>{p}</option>)}
               </Select>
             </Field>
             {(f.vendor||"GCOW")==="Loot Keys" && (
@@ -1127,7 +1722,8 @@ function AllocateTab({ products, allocs, setProducts, setAllocs }) {
           )}
         </div>
       </div>
-    </div>
+    </div>}
+  </div>
   );
 }
 
@@ -2599,12 +3195,35 @@ function AdminTab({ appUsers, setAppUsers }) {
 }
 
 // ── BUDGET CONSTANTS ────────────────────────────────────────────────────────────
-const VENDORS  = ["GCOW","Loot Keys","Kinguin","Internal","Other"];
+const VENDORS  = ["GCOW","Loot Keys","Kinguin","Riot Internal","Internal","Other"];
 const PURPOSES = ["MP","Raffles","Buff Pass"];
 const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
+// ── BUDGET SHARED COMPONENTS ───────────────────────────────────────────────────
+function BudgetBlock({title,sub,children,empty}) {
+  return (
+    <div style={{background:"#0d0d0d",border:"1px solid #1a1a1a",borderRadius:14,overflow:"hidden",marginBottom:20}}>
+      <div style={{padding:"14px 20px",borderBottom:"1px solid #1a1a1a"}}>
+        <div style={{fontSize:14,fontWeight:800,color:"#f1f5f9"}}>{title}</div>
+        {sub&&<div style={{fontSize:11,color:"#555",marginTop:2}}>{sub}</div>}
+      </div>
+      {children || <div style={{padding:32,textAlign:"center",color:"#333",fontSize:13}}>{empty}</div>}
+    </div>
+  );
+}
+const TOTAL_C  = "#fbbf24";
+const TOTAL_BG = "rgba(251,191,36,0.07)";
+const TOTAL_BD = "2px solid rgba(251,191,36,0.25)";
+function BudgetFoot({cols,vals}) {
+  return (
+    <tfoot><tr style={{background:TOTAL_BG,borderTop:TOTAL_BD}}>
+      {vals.map((v,i)=><td key={i} style={{padding:"11px 16px",fontWeight:900,color:TOTAL_C,whiteSpace:"nowrap"}} colSpan={i===0?cols:1}>{v}</td>)}
+    </tr></tfoot>
+  );
+}
+
 // ── BUDGET OVERVIEW ────────────────────────────────────────────────────────────
-function BudgetOverview({ products, allocs }) {
+function BudgetOverview({ products, allocs, raffles, raffleCountries, budgetExtras, setBudgetExtras }) {
   const TH = (s,c="#444") => <th style={{textAlign:"left",padding:"11px 16px",color:c,fontWeight:700,fontSize:11,letterSpacing:"0.05em",textTransform:"uppercase",whiteSpace:"nowrap",borderBottom:"1px solid #1a1a1a"}}>{s}</th>;
   const purposeColor = pu => pu==="MP"?G:pu==="Raffles"?"#a78bfa":"#38bdf8";
   const purposeBg    = pu => pu==="MP"?"rgba(200,255,0,0.07)":pu==="Raffles"?"rgba(168,139,250,0.09)":"rgba(56,189,248,0.09)";
@@ -2628,8 +3247,18 @@ function BudgetOverview({ products, allocs }) {
       if (!m[v]) m[v] = 0;
       m[v] += calcRealDaily(prod, alloc);
     });
-    return Object.entries(m).sort();
-  }, [allocFlat]);
+    (raffles||[]).forEach(r => {
+      const v = r.vendor || "Unknown";
+      if (!m[v]) m[v] = 0;
+      m[v] += ((r.marketPrice||0)*(r.timesPerMonth||0)) / 30.5;
+    });
+    (budgetExtras||[]).forEach(e => {
+      const v = e.vendor || "Unknown";
+      if (!m[v]) m[v] = 0;
+      m[v] += (e.monthly||0) / 30.5;
+    });
+    return Object.entries(m).filter(([,v])=>v>0).sort();
+  }, [allocFlat, raffles, budgetExtras]);
 
   const purposeRows = useMemo(() => {
     const m = {};
@@ -2640,8 +3269,22 @@ function BudgetOverview({ products, allocs }) {
       if (!m[k]) m[k] = { vendor:v, purpose:pu, daily:0 };
       m[k].daily += calcRealDaily(prod, alloc);
     });
+    (raffles||[]).forEach(r => {
+      const v  = r.vendor || "Unknown";
+      const k  = v + "|||Raffles";
+      const monthly = (r.marketPrice||0)*(r.timesPerMonth||0);
+      if (!m[k]) m[k] = { vendor:v, purpose:"Raffles", daily:0 };
+      m[k].daily += monthly / 30.5;
+    });
+    (budgetExtras||[]).forEach(e => {
+      const v  = e.vendor || "Unknown";
+      const pu = e.purpose || "MP";
+      const k  = v + "|||" + pu;
+      if (!m[k]) m[k] = { vendor:v, purpose:pu, daily:0 };
+      m[k].daily += (e.monthly||0) / 30.5;
+    });
     return Object.values(m).sort((a,b) => a.vendor.localeCompare(b.vendor)||a.purpose.localeCompare(b.purpose));
-  }, [allocFlat]);
+  }, [allocFlat, raffles, budgetExtras]);
 
   const rafflesRows = useMemo(() => {
     const m = {};
@@ -2657,73 +3300,140 @@ function BudgetOverview({ products, allocs }) {
   const totalV = vendorMap.reduce((s,[,v])=>s+v,0);
   const totalP = purposeRows.reduce((s,r)=>s+r.daily,0);
   const totalR = rafflesRows.reduce((s,r)=>s+r.daily*30,0);
+  // purposeRows now includes raffles + extras so totalP is the grand monthly total / 30.5
 
-  const Block = ({title,sub,children,empty}) => (
-    <div style={{background:"#0d0d0d",border:"1px solid #1a1a1a",borderRadius:14,overflow:"hidden",marginBottom:20}}>
-      <div style={{padding:"14px 20px",borderBottom:"1px solid #1a1a1a"}}>
-        <div style={{fontSize:14,fontWeight:800,color:"#f1f5f9"}}>{title}</div>
-        {sub&&<div style={{fontSize:11,color:"#555",marginTop:2}}>{sub}</div>}
-      </div>
-      {children || <div style={{padding:32,textAlign:"center",color:"#333",fontSize:13}}>{empty}</div>}
-    </div>
-  );
-  const Foot = ({cols,vals}) => (
-    <tfoot><tr style={{background:"rgba(200,255,0,0.04)",borderTop:"1px solid rgba(200,255,0,0.15)"}}>
-      {vals.map((v,i)=><td key={i} style={{padding:"11px 16px",fontWeight:900,color:G,whiteSpace:"nowrap"}} colSpan={i===0?cols:1}>{v}</td>)}
-    </tr></tfoot>
-  );
+  // New raffle products (from raffles state — NOT products)
+  const rafflePlanRows = useMemo(() => (raffles||[]).map(r => ({
+    r, monthly:(r.marketPrice||0)*(r.timesPerMonth||0)
+  })), [raffles]);
+  const totalRafflePlan = rafflePlanRows.reduce((s,x)=>s+x.monthly,0);
+
+  // Vendor monthly totals (products + raffles + manual extras)
+  const vendorMonthly = useMemo(() => {
+    const m = {};
+    allocFlat.forEach(({prod,alloc}) => {
+      const v = prod.vendor||prod.provider||"Unknown";
+      if(!m[v]) m[v]=0;
+      m[v] += calcRealDaily(prod,alloc)*30.5;
+    });
+    (raffles||[]).forEach(r => {
+      const v = r.vendor||"Unknown";
+      if(!m[v]) m[v]=0;
+      m[v] += (r.marketPrice||0)*(r.timesPerMonth||0);
+    });
+    (budgetExtras||[]).forEach(e => {
+      const v = e.vendor||"Unknown";
+      if(!m[v]) m[v]=0;
+      m[v] += e.monthly||0;
+    });
+    return Object.entries(m).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
+  }, [allocFlat, raffles, budgetExtras]);
+
+  // Manual extras state
+  const [extrasForm, setExtrasForm] = React.useState({name:"",vendor:"GCOW",purpose:"MP",monthly:""});
+  const setEF = (k,v) => setExtrasForm(p=>({...p,[k]:v}));
+  const addExtra = () => {
+    if(!extrasForm.name||!extrasForm.monthly) return;
+    setBudgetExtras(p=>[...p,{id:Date.now(),...extrasForm,monthly:parseFloat(extrasForm.monthly)||0}]);
+    setExtrasForm({name:"",vendor:"GCOW",purpose:"MP",monthly:""});
+  };
+
+  const Block = BudgetBlock;
+  const Foot  = BudgetFoot;
 
   return (
     <div>
+      {vendorMonthly.length>0&&(
+        <div style={{display:"grid",gridTemplateColumns:`repeat(${Math.min(vendorMonthly.length,4)},1fr)`,gap:16,marginBottom:28}}>
+          {vendorMonthly.map(([vendor,monthly])=>(
+            <div key={vendor} style={{background:"#0d0d0d",border:"1px solid #1a1a1a",borderRadius:16,padding:"22px 24px",position:"relative",overflow:"hidden",textAlign:"center"}}>
+              <div style={{position:"absolute",top:0,left:0,right:0,height:3,background:`linear-gradient(90deg,${G},${G}88)`}}/>
+              <div style={{fontSize:11,fontWeight:700,color:"#555",letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8}}>{vendor}</div>
+              <div style={{fontSize:28,fontWeight:900,color:"#f1f5f9",letterSpacing:"-0.03em",marginBottom:4}}>{usd(monthly)}</div>
+              <div style={{fontSize:11,color:"#555"}}>monthly budget</div>
+            </div>
+          ))}
+        </div>
+      )}
+
       <Block title="Total Budget by Vendor" sub="Real daily budgets (demand × pulse utilization)"
              empty="No vendor data — add products with a Vendor field in the Allocate tab.">
         {vendorMap.length>0&&<table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-          <thead><tr>{[TH("Vendor"),TH("Daily Budget"),TH("15-Day"),TH("30-Day")]}</tr></thead>
+          <thead><tr>{[TH("Vendor"),TH("Daily Budget"),TH("15-Day"),TH("Monthly")]}</tr></thead>
           <tbody>{vendorMap.map(([v,daily])=>(
             <tr key={v} style={{borderBottom:"1px solid #111"}}>
               <td style={{padding:"11px 16px",fontWeight:700,color:"#f1f5f9"}}>{v}</td>
               <td style={{padding:"11px 16px",color:"#888"}}>{usd(daily)}</td>
               <td style={{padding:"11px 16px",color:"#888"}}>{usd(daily*15)}</td>
-              <td style={{padding:"11px 16px",color:"#888"}}>{usd(daily*30)}</td>
+              <td style={{padding:"11px 16px",color:"#888"}}>{usd(daily*30.5)}</td>
             </tr>
           ))}</tbody>
-          <Foot cols={1} vals={["Grand Total",usd(totalV),usd(totalV*15),usd(totalV*30)]}/>
+          <Foot cols={1} vals={["Grand Total",usd(totalV),usd(totalV*15),usd(totalV*30.5)]}/>
         </table>}
       </Block>
 
-      <Block title="Total Real Budget by Purpose" sub="Vendor × Purpose breakdown"
-             empty="No data — add products with Vendor and Purpose fields.">
+      <Block title="Total Real Budget by Purpose" sub="Vendor × Purpose — includes MP products, raffles, and fixed budget items"
+             empty="No data yet — add products in the Allocate tab or add fixed items below.">
         {purposeRows.length>0&&<table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
           <thead><tr>{[TH("Vendor"),TH("Purpose"),TH("Daily Budget"),TH("15-Day"),TH("Monthly")]}</tr></thead>
           <tbody>{purposeRows.map(r=>(
-            <tr key={r.vendor+r.purpose} style={{borderBottom:"1px solid #111"}}>
+            <tr key={r.vendor+r.purpose} style={{borderBottom:"1px solid #111",background:purposeBg(r.purpose)}}>
               <td style={{padding:"11px 16px",fontWeight:700,color:"#f1f5f9"}}>{r.vendor}</td>
               <td style={{padding:"11px 16px"}}>
-                <span style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:4,background:purposeBg(r.purpose),color:purposeColor(r.purpose),border:`1px solid ${purposeColor(r.purpose)}33`}}>{r.purpose}</span>
+                <span style={{fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:4,background:purposeBg(r.purpose),color:purposeColor(r.purpose),border:`1px solid ${purposeColor(r.purpose)}44`}}>{r.purpose}</span>
               </td>
-              <td style={{padding:"11px 16px",color:"#888"}}>{usd(r.daily)}</td>
+              <td style={{padding:"11px 16px",color:purposeColor(r.purpose),fontWeight:700}}>{usd(r.daily)}</td>
               <td style={{padding:"11px 16px",color:"#888"}}>{usd(r.daily*15)}</td>
-              <td style={{padding:"11px 16px",color:"#888"}}>{usd(r.daily*30)}</td>
+              <td style={{padding:"11px 16px",color:purposeColor(r.purpose),fontWeight:800}}>{usd(r.daily*30.5)}</td>
             </tr>
           ))}</tbody>
-          <Foot cols={2} vals={["Grand Total",usd(totalP),usd(totalP*15),usd(totalP*30)]}/>
+          <Foot cols={2} vals={["Grand Total","",usd(totalP*15),usd(totalP*30.5)]}/>
         </table>}
+
+        {/* Add fixed budget item */}
+        <div style={{padding:"12px 16px",borderTop:"1px solid #0d0d0d",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+          <span style={{fontSize:11,fontWeight:700,color:"#555",textTransform:"uppercase",letterSpacing:"0.07em",flexShrink:0}}>+ Fixed item:</span>
+          <input value={extrasForm.name} onChange={e=>setEF("name",e.target.value)} placeholder="Name (e.g. Buff Pass)" style={{background:"#111",border:"1px solid #1a1a1a",borderRadius:7,color:"#f1f5f9",fontSize:12,padding:"7px 10px",outline:"none",fontFamily:"inherit",flex:"2 1 130px"}}/>
+          <select value={extrasForm.vendor} onChange={e=>setEF("vendor",e.target.value)} style={{background:"#111",border:"1px solid #1a1a1a",borderRadius:7,color:"#f1f5f9",fontSize:12,padding:"7px 10px",outline:"none",fontFamily:"inherit",flex:"1 1 90px"}}>
+            {VENDORS.map(v=><option key={v}>{v}</option>)}
+          </select>
+          <select value={extrasForm.purpose} onChange={e=>setEF("purpose",e.target.value)} style={{background:"#111",border:"1px solid #1a1a1a",borderRadius:7,color:"#f1f5f9",fontSize:12,padding:"7px 10px",outline:"none",fontFamily:"inherit",flex:"1 1 80px"}}>
+            {["MP","Buff Pass","Raffles"].map(p=><option key={p}>{p}</option>)}
+          </select>
+          <input type="number" value={extrasForm.monthly} onChange={e=>setEF("monthly",e.target.value)} placeholder="Monthly $" style={{background:"#111",border:"1px solid #1a1a1a",borderRadius:7,color:"#f1f5f9",fontSize:12,padding:"7px 10px",outline:"none",fontFamily:"inherit",flex:"1 1 80px"}}/>
+          <button onClick={addExtra} disabled={!extrasForm.name||!extrasForm.monthly} style={{background:G,color:"#0a0a0a",border:"none",borderRadius:7,padding:"7px 14px",fontSize:12,fontWeight:800,cursor:extrasForm.name&&extrasForm.monthly?"pointer":"not-allowed",fontFamily:"inherit",opacity:extrasForm.name&&extrasForm.monthly?1:0.4,flexShrink:0}}>+ Add</button>
+        </div>
+        {(budgetExtras&&budgetExtras.length>0)&&(
+          <div style={{borderTop:"1px solid #0d0d0d",padding:"4px 0"}}>
+            {budgetExtras.map(e=>(
+              <div key={e.id} style={{display:"flex",alignItems:"center",padding:"6px 16px",gap:10}}>
+                <div style={{flex:1,fontSize:12,color:"#888"}}>{e.name}</div>
+                <span style={{fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:4,background:purposeBg(e.purpose),color:purposeColor(e.purpose),border:`1px solid ${purposeColor(e.purpose)}44`}}>{e.purpose}</span>
+                <div style={{fontSize:11,color:"#555",minWidth:55,textAlign:"right"}}>{usd(e.monthly)}/mo</div>
+                <button onClick={()=>setBudgetExtras(p=>p.filter(x=>x.id!==e.id))} style={{background:"none",border:"none",color:"#ef4444",cursor:"pointer",fontSize:11,fontFamily:"inherit",fontWeight:700,padding:"0 4px"}}>✕</button>
+              </div>
+            ))}
+          </div>
+        )}
       </Block>
 
-      <Block title="Monthly Raffles Plan" sub="Products with Purpose = Raffles"
-             empty="No Raffles products — set Purpose = Raffles in the Allocate tab.">
-        {rafflesRows.length>0&&<table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-          <thead><tr>{[TH("Vendor"),TH("Brand"),TH("Unit Price"),TH("Monthly Qty"),TH("Monthly Budget")]}</tr></thead>
-          <tbody>{rafflesRows.map(r=>(
-            <tr key={r.prod.id} style={{borderBottom:"1px solid #111"}}>
-              <td style={{padding:"11px 16px",color:"#555"}}>{r.prod.vendor||r.prod.provider||"—"}</td>
-              <td style={{padding:"11px 16px",fontWeight:700,color:"#f1f5f9"}}>{r.prod.brand}</td>
-              <td style={{padding:"11px 16px",color:"#888"}}>{usd(calcPriceUSD(r.prod))}</td>
-              <td style={{padding:"11px 16px",color:"#888"}}>{Math.round(r.qty).toLocaleString()}</td>
-              <td style={{padding:"11px 16px",fontWeight:700,color:"#f1f5f9"}}>{usd(r.daily*30)}</td>
+      <Block title="Monthly Raffles Plan" sub="Monthly cost per raffle (not multiplied by country count)"
+             empty="No raffle products yet — add them via the Allocate tab.">
+        {rafflePlanRows.length>0&&<table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+          <thead><tr>{[TH("Raffle Name"),TH("Vendor"),TH("Market Price"),TH("Times/Month","#a78bfa"),TH("Monthly Cost","#a78bfa")]}</tr></thead>
+          <tbody>{rafflePlanRows.map(({r,monthly})=>(
+            <tr key={r.id} style={{borderBottom:"1px solid #111"}}>
+              <td style={{padding:"11px 16px",fontWeight:700,color:"#f1f5f9"}}>{r.name}</td>
+              <td style={{padding:"11px 16px",color:"#888"}}>{r.vendor||"—"}</td>
+              <td style={{padding:"11px 16px",color:"#888"}}>{usd(r.marketPrice||0)}</td>
+              <td style={{padding:"11px 16px",color:"#a78bfa",fontWeight:700}}>{r.timesPerMonth||0}×</td>
+              <td style={{padding:"11px 16px",fontWeight:900,color:"#a78bfa"}}>{usd(monthly)}</td>
             </tr>
           ))}</tbody>
-          <Foot cols={4} vals={["Grand Total",usd(totalR)]}/>
+          <tfoot><tr style={{background:TOTAL_BG,borderTop:TOTAL_BD}}>
+            <td colSpan={4} style={{padding:"11px 16px",fontWeight:900,color:TOTAL_C,whiteSpace:"nowrap"}}>Grand Total</td>
+            <td style={{padding:"11px 16px",fontWeight:900,color:TOTAL_C,whiteSpace:"nowrap"}}>{usd(totalRafflePlan)}</td>
+          </tr></tfoot>
         </table>}
       </Block>
     </div>
@@ -2824,9 +3534,9 @@ function VendorOrders({ products, allocs, orders, setOrders, transactions, setTr
                   <td style={{padding:"9px 14px",fontWeight:700,color:G}}>{usd(it.totalBudget)}</td>
                 </tr>
               ))}</tbody>
-              <tfoot><tr style={{background:"rgba(200,255,0,0.03)",borderTop:"1px solid #1a1a1a"}}>
-                <td colSpan={5} style={{padding:"9px 14px",fontWeight:700,color:"#555"}}>Subtotal</td>
-                <td style={{padding:"9px 14px",fontWeight:900,color:G}}>{usd(items.reduce((s,it)=>s+it.totalBudget,0))}</td>
+              <tfoot><tr style={{background:TOTAL_BG,borderTop:TOTAL_BD}}>
+                <td colSpan={5} style={{padding:"9px 14px",fontWeight:700,color:TOTAL_C}}>Subtotal</td>
+                <td style={{padding:"9px 14px",fontWeight:900,color:TOTAL_C}}>{usd(items.reduce((s,it)=>s+it.totalBudget,0))}</td>
               </tr></tfoot>
             </table>
           </div>
@@ -2906,10 +3616,10 @@ function VendorOrders({ products, allocs, orders, setOrders, transactions, setTr
                       <td style={{padding:"9px 14px",fontWeight:900,color:G}}>{usd(r.totalBudget)}</td>
                     </tr>
                   ))}</tbody>
-                  <tfoot><tr style={{background:"rgba(200,255,0,0.04)",borderTop:"1px solid rgba(200,255,0,0.2)"}}>
-                    <td colSpan={10} style={{padding:"11px 14px",fontWeight:900,color:G}}>Total</td>
-                    <td style={{padding:"11px 14px",fontWeight:900,color:G}}>{rows.reduce((s,r)=>s+r.totalQty,0).toLocaleString()}</td>
-                    <td style={{padding:"11px 14px",fontWeight:900,color:G}}>{usd(grandTotal)}</td>
+                  <tfoot><tr style={{background:TOTAL_BG,borderTop:TOTAL_BD}}>
+                    <td colSpan={10} style={{padding:"11px 14px",fontWeight:900,color:TOTAL_C}}>Total</td>
+                    <td style={{padding:"11px 14px",fontWeight:900,color:TOTAL_C}}>{rows.reduce((s,r)=>s+r.totalQty,0).toLocaleString()}</td>
+                    <td style={{padding:"11px 14px",fontWeight:900,color:TOTAL_C}}>{usd(grandTotal)}</td>
                   </tr></tfoot>
                 </table>
               </div>
@@ -2936,9 +3646,9 @@ function VendorOrders({ products, allocs, orders, setOrders, transactions, setTr
                     </tr>
                     );
                   })}</tbody>
-                  <tfoot><tr style={{background:"rgba(200,255,0,0.04)",borderTop:"1px solid rgba(200,255,0,0.2)"}}>
-                    <td colSpan={4} style={{padding:"11px 16px",fontWeight:900,color:G}}>Total to Transfer</td>
-                    <td style={{padding:"11px 16px",fontWeight:900,color:G}}>{usd(gcowTotal)}</td>
+                  <tfoot><tr style={{background:TOTAL_BG,borderTop:TOTAL_BD}}>
+                    <td colSpan={4} style={{padding:"11px 16px",fontWeight:900,color:TOTAL_C}}>Total to Transfer</td>
+                    <td style={{padding:"11px 16px",fontWeight:900,color:TOTAL_C}}>{usd(gcowTotal)}</td>
                   </tr></tfoot>
                 </table>
                 {Object.keys(step2Amounts).some(k=>gcowRows.find(r=>r.purpose===k)&&Number(step2Amounts[k])!==gcowRows.find(r=>r.purpose===k).daily*15)&&(
@@ -3174,6 +3884,65 @@ function FinanceRequests({ products, allocs, appUsers, transactions, setTransact
             </select>
           ))}
         </div>
+        <div style={{borderTop:"1px solid #1a1a1a",padding:"20px 18px",background:"#0a0a0a"}}>
+          <div style={{fontSize:12,fontWeight:800,color:"#f1f5f9",marginBottom:16,letterSpacing:"0.04em"}}>Total Transfers per Month — Last 12 Months</div>
+          {(()=>{
+            const hasData = monthlyData.some(d=>d.total>0);
+            const maxVal = Math.max(...monthlyData.map(d=>d.total),1);
+            return (
+              <div>
+                <div style={{display:"flex",alignItems:"flex-end",gap:4,height:140,marginBottom:4}}>
+                  {monthlyData.map(d=>{
+                    const barH = d.total>0 ? Math.max((d.total/maxVal)*110,6) : 4;
+                    const activeDepts = DEPTS.filter(dep=>d.depts[dep]>0);
+                    return (
+                      <div key={d.key} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",height:"100%",justifyContent:"flex-end",gap:2}}>
+                        {d.total>0&&<div style={{fontSize:10,color:"#f1f5f9",fontWeight:900,textAlign:"center",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"100%",letterSpacing:"-0.02em"}}>
+                          {"$"+Math.round(d.total).toLocaleString()}
+                        </div>}
+                        <div style={{width:"100%",display:"flex",flexDirection:"column",borderRadius:"3px 3px 0 0",overflow:"visible",height:`${barH}px`,cursor:activeDepts.length>0?"pointer":"default"}}>
+                          {d.total>0 ? (()=>{
+                            const activeDeps = DEPTS.filter(dep=>d.depts[dep]>0);
+                            const MIN_H = 6;
+                            const minTotal = activeDeps.length * MIN_H;
+                            const remaining = Math.max(barH - minTotal, 0);
+                            return activeDeps.map((dep,idx)=>{
+                              const natural = (d.depts[dep]/d.total)*barH;
+                              const h = natural < MIN_H ? MIN_H : MIN_H + (d.depts[dep]/d.total)*remaining;
+                              return (
+                                <div key={dep}
+                                  onClick={()=>setChartModal({month:d,dept:dep})}
+                                  title={`${DEPT_LABELS[dep]}: $${Math.round(d.depts[dep]).toLocaleString()}`}
+                                  style={{width:"100%",height:`${h}px`,flexShrink:0,
+                                    background:DEPT_COLORS[dep],opacity:0.85,
+                                    borderTop:idx>0?"1px solid rgba(0,0,0,0.25)":"",
+                                    borderRadius:idx===0?"3px 3px 0 0":""}}/>
+                              );
+                            });
+                          })() : <div style={{width:"100%",height:"100%",background:"rgba(255,255,255,0.04)",border:"1px solid #1a1a1a",borderRadius:"3px 3px 0 0"}}/>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{display:"flex",gap:4,marginBottom:14}}>
+                  {monthlyData.map(d=>(
+                    <div key={d.key} style={{flex:1,textAlign:"center",fontSize:9,color:"#555",whiteSpace:"nowrap"}}>{d.label}</div>
+                  ))}
+                </div>
+                <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
+                  {DEPTS.map(dep=>(
+                    <div key={dep} style={{display:"flex",alignItems:"center",gap:5}}>
+                      <div style={{width:10,height:10,borderRadius:2,background:DEPT_COLORS[dep],opacity:0.8}}/>
+                      <span style={{fontSize:11,color:"#555"}}>{DEPT_LABELS[dep]}</span>
+                    </div>
+                  ))}
+                </div>
+                {!hasData&&<div style={{textAlign:"center",fontSize:11,color:"#333",marginTop:12}}>No transactions recorded yet</div>}
+              </div>
+            );
+          })()}
+        </div>
         <div style={{overflowX:"auto"}}>
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:700}}>
             <thead><tr>{[TH("ID"),TH("Vendor"),TH("Total",G),TH("Date"),TH("Status"),TH("By"),TH("Note"),TH("Split")]}</tr></thead>
@@ -3198,54 +3967,6 @@ function FinanceRequests({ products, allocs, appUsers, transactions, setTransact
               ))}
             </tbody>
           </table>
-        </div>
-        <div style={{borderTop:"1px solid #1a1a1a",padding:"20px 18px",background:"#0a0a0a"}}>
-          <div style={{fontSize:12,fontWeight:800,color:"#f1f5f9",marginBottom:16,letterSpacing:"0.04em"}}>Total Transfers per Month — Last 12 Months</div>
-          {(()=>{
-            const hasData = monthlyData.some(d=>d.total>0);
-            const maxVal = Math.max(...monthlyData.map(d=>d.total),1);
-            return (
-              <div>
-                <div style={{display:"flex",alignItems:"flex-end",gap:4,height:140,marginBottom:4}}>
-                  {monthlyData.map(d=>{
-                    const barH = d.total>0 ? Math.max((d.total/maxVal)*110,6) : 4;
-                    const activeDepts = DEPTS.filter(dep=>d.depts[dep]>0);
-                    return (
-                      <div key={d.key} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",height:"100%",justifyContent:"flex-end",gap:2}}>
-                        {d.total>0&&<div style={{fontSize:8,color:"#888",fontWeight:700,textAlign:"center",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"100%"}}>
-                          {"$"+Math.round(d.total).toLocaleString()}
-                        </div>}
-                        <div style={{width:"100%",display:"flex",flexDirection:"column",borderRadius:"3px 3px 0 0",overflow:"hidden",height:`${barH}px`,cursor:activeDepts.length>0?"pointer":"default"}}>
-                          {d.total>0 ? DEPTS.filter(dep=>d.depts[dep]>0).map((dep,idx,arr)=>(
-                            <div key={dep}
-                              onClick={()=>setChartModal({month:d,dept:dep})}
-                              title={`${DEPT_LABELS[dep]}: $${Math.round(d.depts[dep]).toLocaleString()}`}
-                              style={{width:"100%",height:`${(d.depts[dep]/d.total)*100}%`,
-                                background:DEPT_COLORS[dep],opacity:0.8,
-                                borderTop:idx>0?"1px solid rgba(0,0,0,0.2)":""}}/>
-                          )) : <div style={{width:"100%",height:"100%",background:"rgba(255,255,255,0.04)",border:"1px solid #1a1a1a"}}/>}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div style={{display:"flex",gap:4,marginBottom:14}}>
-                  {monthlyData.map(d=>(
-                    <div key={d.key} style={{flex:1,textAlign:"center",fontSize:9,color:"#555",whiteSpace:"nowrap"}}>{d.label}</div>
-                  ))}
-                </div>
-                <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
-                  {DEPTS.map(dep=>(
-                    <div key={dep} style={{display:"flex",alignItems:"center",gap:5}}>
-                      <div style={{width:10,height:10,borderRadius:2,background:DEPT_COLORS[dep],opacity:0.8}}/>
-                      <span style={{fontSize:11,color:"#555"}}>{DEPT_LABELS[dep]}</span>
-                    </div>
-                  ))}
-                </div>
-                {!hasData&&<div style={{textAlign:"center",fontSize:11,color:"#333",marginTop:12}}>No transactions recorded yet</div>}
-              </div>
-            );
-          })()}
         </div>
       </div>
     </div>
@@ -3680,7 +4401,7 @@ function BudgetVsActual({ products, allocs, analyticsRows, analyticsFrom, analyt
 }
 
 // ── BUDGET TAB ──────────────────────────────────────────────────────────────────
-function BudgetTab({ products, allocs, orders, setOrders, transactions, setTransactions, displayName, appUsers, isAdmin, analyticsRows, analyticsFrom, analyticsTo, analyticsStatus }) {
+function BudgetTab({ products, allocs, orders, setOrders, transactions, setTransactions, displayName, appUsers, isAdmin, analyticsRows, analyticsFrom, analyticsTo, analyticsStatus, raffles, raffleCountries, budgetExtras, setBudgetExtras }) {
   const [sub, setSub] = useState("overview");
   const SUB = [
     { id:"overview",  label:"Budget Overview"   },
@@ -3700,7 +4421,7 @@ function BudgetTab({ products, allocs, orders, setOrders, transactions, setTrans
           </button>
         ))}
       </div>
-      {sub==="overview"  &&<BudgetOverview  products={products} allocs={allocs}/>}
+      {sub==="overview"  &&<BudgetOverview  products={products} allocs={allocs} raffles={raffles} raffleCountries={raffleCountries} budgetExtras={budgetExtras} setBudgetExtras={setBudgetExtras}/>}
       {sub==="vs-actual" &&<BudgetVsActual  products={products} allocs={allocs} analyticsRows={analyticsRows} analyticsFrom={analyticsFrom} analyticsTo={analyticsTo} analyticsStatus={analyticsStatus}/>}
       {sub==="orders"    &&<VendorOrders    products={products} allocs={allocs} orders={orders} setOrders={setOrders} transactions={transactions} setTransactions={setTransactions} displayName={displayName} isAdmin={isAdmin}/>}
       {sub==="finance"   &&<FinanceRequests products={products} allocs={allocs} appUsers={appUsers} transactions={transactions} setTransactions={setTransactions} displayName={displayName} isAdmin={isAdmin}/>}
@@ -3763,10 +4484,14 @@ jsx = jsx.replace(
     '  ];\n'
     '\n'
     '  const [tab,        setTab]        = useState("dashboard");\n'
-    '  const [products,      setProducts]      = useState([]);\n'
-    '  const [allocs,        setAllocs]        = useState({});\n'
-    '  const [orders,        setOrders]        = useState([]);\n'
-    '  const [transactions,  setTransactions]  = useState([]);\n'
+    '  const [products,          setProducts]          = useState([]);\n'
+    '  const [allocs,            setAllocs]            = useState({});\n'
+    '  const [orders,            setOrders]            = useState([]);\n'
+    '  const [transactions,      setTransactions]      = useState([]);\n'
+    '  const [raffles,           setRaffles]           = useState([]);\n'
+    '  const [raffleCountries,   setRaffleCountries]   = useState({});\n'
+    '  const [budgetExtras,      setBudgetExtras]      = useState([]);\n'
+    '  const [allocateMode,      setAllocateMode]      = useState("mp");\n'
     '  const [saveStatus, setSaveStatus] = useState("loading");\n'
     '  const [loaded,     setLoaded]     = useState(false);\n'
     '  const saveTimer = useRef(null);\n'
@@ -3833,6 +4558,9 @@ jsx = jsx.replace(
     '        setAllocs(data.allocs || {});\n'
     '        setOrders(data.orders || []);\n'
     '        setTransactions(data.transactions || []);\n'
+    '        setRaffles(data.raffles || []);\n'
+    '        setRaffleCountries(data.raffleCountries || {});\n'
+    '        setBudgetExtras(data.budgetExtras || []);\n'
     '        if (data.appUsers) { setAppUsers(data.appUsers); localStorage.setItem("buff_appUsers",JSON.stringify(data.appUsers)); }\n'
     '        setSaveStatus("saved");\n'
     '        setLoaded(true);\n'
@@ -3842,6 +4570,9 @@ jsx = jsx.replace(
     '        setAllocs({});\n'
     '        setOrders([]);\n'
     '        setTransactions([]);\n'
+    '        setRaffles([]);\n'
+    '        setRaffleCountries({});\n'
+    '        setBudgetExtras([]);\n'
     '        setSaveStatus("error");\n'
     '        setLoaded(true);\n'
     '      });\n'
@@ -3853,11 +4584,11 @@ jsx = jsx.replace(
     '    setSaveStatus("saving");\n'
     '    clearTimeout(saveTimer.current);\n'
     '    saveTimer.current = setTimeout(() => {\n'
-    '      fetch(SCRIPT_URL, { method:"POST", mode:"no-cors", body:JSON.stringify({ products, allocs, orders, transactions, appUsers }) })\n'
+    '      fetch(SCRIPT_URL, { method:"POST", mode:"no-cors", body:JSON.stringify({ products, allocs, orders, transactions, appUsers, raffles, raffleCountries, budgetExtras }) })\n'
     '        .then(() => setSaveStatus("saved"))\n'
     '        .catch(() => setSaveStatus("error"));\n'
     '    }, 1500);\n'
-    '  }, [products, allocs, orders, transactions, appUsers]);\n'
+    '  }, [products, allocs, orders, transactions, appUsers, raffles, raffleCountries, budgetExtras]);\n'
     '\n'
     '  // Login screen\n'
     '  if (!authed) return (\n'
