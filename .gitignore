@@ -3,3 +3,7 @@ app.js
 test_compile.js
 __pycache__/
 *.pyc
+
+node_modules/
+_tmp_check.js
+.claude/
