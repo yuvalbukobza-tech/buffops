@@ -400,7 +400,8 @@ function calcDailyBudget(p, r) {
   return calcPriceUSD(p) * calcDailyQty(r);
 }
 function calcRealDaily(p, r) {
-  return calcDailyBudget(p, r) * calcUtilization(p.demandLevel, r.pulsesPerDay);
+  const ut = r && r.utilizationOverride != null ? r.utilizationOverride / 100 : calcUtilization(p.demandLevel, r.pulsesPerDay);
+  return calcDailyBudget(p, r) * ut;
 }
 function calcPricesAfterDiscount(p) {
   const d = (p.discountPct || 0) / 100;
@@ -1257,7 +1258,8 @@ function AllocationForm({
       m[r.productId] = {
         pulsesPerDay: r.pulsesPerDay,
         qtyPerPulse: r.qtyPerPulse,
-        active: r.active !== false
+        active: r.active !== false,
+        utilizationOverride: r.utilizationOverride ?? null
       };
     });
     return m;
@@ -1288,7 +1290,8 @@ function AllocationForm({
       [pid]: {
         pulsesPerDay: 2,
         qtyPerPulse: 5,
-        active: true
+        active: true,
+        utilizationOverride: null
       }
     }));
     setSelProd("");
@@ -1317,6 +1320,15 @@ function AllocationForm({
       [pid]: {
         ...r[pid],
         active: !(r[pid].active !== false)
+      }
+    }));
+  }
+  function updUtil(pid, v) {
+    setRows(r => ({
+      ...r,
+      [pid]: {
+        ...r[pid],
+        utilizationOverride: v === "" || v === null || v === undefined ? null : Math.min(100, Math.max(0, parseInt(v) || 0))
       }
     }));
   }
@@ -1467,7 +1479,8 @@ function AllocationForm({
       const r = rows[pid];
       const dq = calcDailyQty(r);
       const db = calcDailyBudget(p, r);
-      const ut = calcUtilization(p.demandLevel, r.pulsesPerDay);
+      const autoUt = calcUtilization(p.demandLevel, r.pulsesPerDay);
+      const ut = r.utilizationOverride != null ? r.utilizationOverride / 100 : autoUt;
       const rd = db * ut;
       const intervalH = r.pulsesPerDay > 0 ? (24 / r.pulsesPerDay).toFixed(1) : "—";
       return /*#__PURE__*/React.createElement("tr", {
@@ -1568,12 +1581,50 @@ function AllocationForm({
         }
       }, dq), /*#__PURE__*/React.createElement("td", {
         style: {
-          padding: "10px 10px",
-          minWidth: 110
+          padding: "8px 10px",
+          minWidth: 120
         }
       }, /*#__PURE__*/React.createElement(UtilBar, {
         util: ut
-      })), /*#__PURE__*/React.createElement("td", {
+      }), /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "flex",
+          alignItems: "center",
+          gap: 4,
+          marginTop: 5
+        }
+      }, /*#__PURE__*/React.createElement("input", {
+        type: "number",
+        min: 0,
+        max: 100,
+        placeholder: Math.round(autoUt * 100),
+        value: r.utilizationOverride != null ? r.utilizationOverride : "",
+        onChange: e => updUtil(pid, e.target.value),
+        style: {
+          ...inputStyle,
+          width: 46,
+          padding: "2px 5px",
+          textAlign: "center",
+          fontSize: 10
+        }
+      }), /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 10,
+          color: "#555"
+        }
+      }, "%"), r.utilizationOverride != null && /*#__PURE__*/React.createElement("button", {
+        onClick: () => updUtil(pid, null),
+        title: "Reset to auto",
+        style: {
+          background: "none",
+          border: "none",
+          color: "#888",
+          cursor: "pointer",
+          fontSize: 11,
+          padding: 0,
+          lineHeight: 1
+        }
+      }, "\u21BA"))), /*#__PURE__*/React.createElement("td", {
         style: {
           padding: "10px 10px",
           color: "#444",
@@ -1809,7 +1860,8 @@ function AllocationForm({
         productId: pid,
         pulsesPerDay: rows[pid].pulsesPerDay,
         qtyPerPulse: rows[pid].qtyPerPulse,
-        active: rows[pid].active !== false
+        active: rows[pid].active !== false,
+        utilizationOverride: rows[pid].utilizationOverride ?? null
       })));
     }
   }, "Save allocations")));
@@ -2959,6 +3011,44 @@ function CountriesTab({
       )
     }));
   }
+  function buildGlobalSection(selC, prods, als) {
+    if (!selC || selC === "GLOBAL") return null;
+    const globalRows = (als["GLOBAL"] || []).filter(gr => gr.active !== false && prods.find(p => p.id === gr.productId));
+    if (!globalRows.length) return null;
+    const TH2 = (s, c = "#444") => /*#__PURE__*/React.createElement("th", {
+      style: { textAlign: "left", padding: "10px 16px", color: c, fontWeight: 700, fontSize: 11, letterSpacing: "0.05em", textTransform: "uppercase", whiteSpace: "nowrap", borderBottom: "1px solid #1a1a1a" }
+    }, s);
+    const THp2 = s => TH2(s, "#555");
+    const THr2 = s => TH2(s, G);
+    return /*#__PURE__*/React.createElement("div", {
+      style: { borderTop: "1px solid #1a1a1a" }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: { padding: "10px 20px", borderBottom: "1px solid #0d0d0d", display: "flex", alignItems: "center", gap: 10 }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: { fontSize: 10, fontWeight: 800, color: "#38bdf8", background: "rgba(56,189,248,0.1)", border: "1px solid rgba(56,189,248,0.3)", padding: "2px 10px", borderRadius: 4, letterSpacing: "0.05em" }
+    }, "GLOBAL"), /*#__PURE__*/React.createElement("span", {
+      style: { fontSize: 11, color: "#444" }
+    }, "Inherited products \u2014 manage in GLOBAL")), /*#__PURE__*/React.createElement("div", {
+      style: { overflowX: "auto" }
+    }, /*#__PURE__*/React.createElement("table", {
+      style: { width: "100%", borderCollapse: "collapse", fontSize: 12 }
+    }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, [TH2("Brand"), TH2("Price"), TH2("Demand"), TH2("Pulses/day"), TH2("Qty/pulse"), TH2("Daily Qty"), TH2("Utilization"), THp2("Planned"), THr2("Real")])), /*#__PURE__*/React.createElement("tbody", null, globalRows.map(gr => {
+      const gp = prods.find(x => x.id === gr.productId);
+      if (!gp) return null;
+      const gut = gr.utilizationOverride != null ? gr.utilizationOverride / 100 : calcUtilization(gp.demandLevel, gr.pulsesPerDay);
+      const gdb = calcDailyBudget(gp, gr);
+      return /*#__PURE__*/React.createElement("tr", {
+        key: gr.productId,
+        style: { borderBottom: "1px solid #0d0d0d" }
+      }, /*#__PURE__*/React.createElement("td", {
+        style: { padding: "10px 16px" }
+      }, /*#__PURE__*/React.createElement("div", { style: { fontWeight: 800, color: "#f1f5f9" } }, gp.brand), /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: "#333", marginTop: 1 } }, gp.type)), /*#__PURE__*/React.createElement("td", {
+        style: { padding: "10px 16px", whiteSpace: "nowrap" }
+      }, /*#__PURE__*/React.createElement("span", { style: { fontWeight: 700, color: "#f1f5f9" } }, gp.priceToBuffLocal), " ", /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: "#888" } }, gp.currency || "USD")), /*#__PURE__*/React.createElement("td", {
+        style: { padding: "10px 16px" }
+      }, /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, fontWeight: 700, color: demandColor(gp.demandLevel), background: demandBg(gp.demandLevel), padding: "2px 6px", borderRadius: 4, border: `1px solid ${demandColor(gp.demandLevel)}33` } }, gp.demandLevel)), /*#__PURE__*/React.createElement("td", { style: { padding: "10px 16px", color: "#f1f5f9", fontWeight: 700, textAlign: "center" } }, gr.pulsesPerDay), /*#__PURE__*/React.createElement("td", { style: { padding: "10px 16px", color: "#f1f5f9", fontWeight: 700, textAlign: "center" } }, gr.qtyPerPulse), /*#__PURE__*/React.createElement("td", { style: { padding: "10px 16px", color: G, fontWeight: 800, textAlign: "center", fontSize: 14 } }, calcDailyQty(gr)), /*#__PURE__*/React.createElement("td", { style: { padding: "8px 16px", minWidth: 100 } }, /*#__PURE__*/React.createElement(UtilBar, { util: gut }), gr.utilizationOverride != null && /*#__PURE__*/React.createElement("div", { style: { fontSize: 9, fontWeight: 700, color: "#38bdf8", marginTop: 3 } }, "MANUAL")), /*#__PURE__*/React.createElement("td", { style: { padding: "10px 16px", color: "#444", fontWeight: 600 } }, usd(gdb)), /*#__PURE__*/React.createElement("td", { style: { padding: "10px 16px", fontWeight: 800, color: G } }, usd(gdb * gut)));
+    })))));
+  }
   const TH = (s, c = "#444") => /*#__PURE__*/React.createElement("th", {
     style: {
       textAlign: "left",
@@ -3264,7 +3354,7 @@ function CountriesTab({
       const dq = calcDailyQty(r);
       const db = calcDailyBudget(p, r);
       const rd = calcRealDaily(p, r);
-      const ut = calcUtilization(p.demandLevel, r.pulsesPerDay);
+      const ut = r.utilizationOverride != null ? r.utilizationOverride / 100 : calcUtilization(p.demandLevel, r.pulsesPerDay);
       const ivh = (r.pulsesPerDay > 0 ? (24 / r.pulsesPerDay).toFixed(1) : "—") + "h";
       const pu = p.purpose || "MP";
       return /*#__PURE__*/React.createElement("tr", {
@@ -3348,12 +3438,20 @@ function CountriesTab({
         }
       }, ivh), /*#__PURE__*/React.createElement("td", {
         style: {
-          padding: "10px 16px",
+          padding: "8px 16px",
           minWidth: 110
         }
       }, /*#__PURE__*/React.createElement(UtilBar, {
         util: ut
-      })), /*#__PURE__*/React.createElement("td", {
+      }), r.utilizationOverride != null && /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 9,
+          fontWeight: 700,
+          color: "#38bdf8",
+          marginTop: 3,
+          letterSpacing: "0.05em"
+        }
+      }, "MANUAL")), /*#__PURE__*/React.createElement("td", {
         style: {
           padding: "10px 16px",
           color: "#444",
@@ -3456,7 +3554,7 @@ function CountriesTab({
       background: TOTAL_BG
     }
   }, /*#__PURE__*/React.createElement("td", {
-    colSpan: 9,
+    colSpan: 8,
     style: {
       padding: "11px 16px",
       fontWeight: 800,
@@ -3486,7 +3584,7 @@ function CountriesTab({
       fontWeight: 900,
       color: TOTAL_C
     }
-  }, usd(sel.realM)), /*#__PURE__*/React.createElement("td", null))))) : /*#__PURE__*/React.createElement("div", {
+  }, usd(sel.realM)), /*#__PURE__*/React.createElement("td", null), /*#__PURE__*/React.createElement("td", null))))) : /*#__PURE__*/React.createElement("div", {
     style: {
       padding: 40,
       textAlign: "center",
@@ -3648,7 +3746,7 @@ function CountriesTab({
     style: {
       color: "#a78bfa"
     }
-  }, "Allocate"), " tab to add raffles."))) : /*#__PURE__*/React.createElement("div", {
+  }, "Allocate"), " tab to add raffles.")), buildGlobalSection(sel && sel.country, products, allocs)) : /*#__PURE__*/React.createElement("div", {
     style: {
       background: "#0d0d0d",
       border: "1px solid #1a1a1a",
