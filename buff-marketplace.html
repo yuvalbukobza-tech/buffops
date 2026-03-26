@@ -8977,49 +8977,57 @@ function BudgetOverview({
       borderCollapse: "collapse",
       fontSize: 13
     }
-  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, [TH("Raffle Name"), TH("Vendor"), TH("Market Price"), TH("Times/Month", "#a78bfa"), TH("Monthly Cost", "#a78bfa")])), /*#__PURE__*/React.createElement("tbody", null, rafflePlanRows.map(({
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, [TH("Raffle Name"), TH("Vendor"), TH("Market Price"), TH("Times/Month", "#a78bfa"), TH("Countries"), TH("Monthly Cost", "#a78bfa")])), /*#__PURE__*/React.createElement("tbody", null, rafflePlanRows.map(({
     r,
     monthly
-  }) => /*#__PURE__*/React.createElement("tr", {
-    key: r.id,
-    style: {
-      borderBottom: "1px solid #111"
-    }
-  }, /*#__PURE__*/React.createElement("td", {
-    style: {
-      padding: "11px 16px",
-      fontWeight: 700,
-      color: "#f1f5f9"
-    }
-  }, r.name), /*#__PURE__*/React.createElement("td", {
-    style: {
-      padding: "11px 16px",
-      color: "#888"
-    }
-  }, r.vendor || "—"), /*#__PURE__*/React.createElement("td", {
-    style: {
-      padding: "11px 16px",
-      color: "#888"
-    }
-  }, usd(r.marketPrice || 0)), /*#__PURE__*/React.createElement("td", {
-    style: {
-      padding: "11px 16px",
-      color: "#a78bfa",
-      fontWeight: 700
-    }
-  }, r.timesPerMonth || 0, "\xD7"), /*#__PURE__*/React.createElement("td", {
-    style: {
-      padding: "11px 16px",
-      fontWeight: 900,
-      color: "#a78bfa"
-    }
-  }, usd(monthly))))), /*#__PURE__*/React.createElement("tfoot", null, /*#__PURE__*/React.createElement("tr", {
+  }) => {
+    const raffleCList = Object.entries(raffleCountries || {}).filter(([, ids]) => (ids || []).includes(r.id)).map(([c]) => c);
+    const isGlobal = COUNTRIES.every(c => raffleCList.includes(c));
+    return /*#__PURE__*/React.createElement("tr", {
+      key: r.id,
+      style: {
+        borderBottom: "1px solid #111"
+      }
+    }, /*#__PURE__*/React.createElement("td", {
+      style: {
+        padding: "11px 16px",
+        fontWeight: 700,
+        color: "#f1f5f9"
+      }
+    }, r.name), /*#__PURE__*/React.createElement("td", {
+      style: {
+        padding: "11px 16px",
+        color: "#888"
+      }
+    }, r.vendor || "—"), /*#__PURE__*/React.createElement("td", {
+      style: {
+        padding: "11px 16px",
+        color: "#888"
+      }
+    }, usd(r.marketPrice || 0)), /*#__PURE__*/React.createElement("td", {
+      style: {
+        padding: "11px 16px",
+        color: "#a78bfa",
+        fontWeight: 700
+      }
+    }, r.timesPerMonth || 0, "\xD7"), /*#__PURE__*/React.createElement("td", {
+      style: {
+        padding: "11px 16px"
+      }
+    }, raffleCList.length === 0 ? /*#__PURE__*/React.createElement("span", {style: {color: "#555", fontSize: 11}}, "—") : isGlobal ? /*#__PURE__*/React.createElement("span", {style: {background: "rgba(56,189,248,0.13)", color: "#38bdf8", borderRadius: 4, padding: "2px 7px", fontSize: 11, fontWeight: 800}}, "GLOBAL") : /*#__PURE__*/React.createElement("div", {style: {display: "flex", flexWrap: "wrap", gap: 3}}, raffleCList.map(c => /*#__PURE__*/React.createElement("span", {key: c, style: {background: "rgba(200,255,0,0.1)", color: "#c8ff00", borderRadius: 4, padding: "2px 6px", fontSize: 10, fontWeight: 700}}, c)))), /*#__PURE__*/React.createElement("td", {
+      style: {
+        padding: "11px 16px",
+        fontWeight: 900,
+        color: "#a78bfa"
+      }
+    }, usd(monthly)));
+  })), /*#__PURE__*/React.createElement("tfoot", null, /*#__PURE__*/React.createElement("tr", {
     style: {
       background: TOTAL_BG,
       borderTop: TOTAL_BD
     }
   }, /*#__PURE__*/React.createElement("td", {
-    colSpan: 4,
+    colSpan: 5,
     style: {
       padding: "11px 16px",
       fontWeight: 900,
