@@ -400,7 +400,8 @@ function calcDailyBudget(p, r) {
   return calcPriceUSD(p) * calcDailyQty(r);
 }
 function calcRealDaily(p, r) {
-  return calcDailyBudget(p, r) * calcUtilization(p.demandLevel, r.pulsesPerDay);
+  const ut = r && r.utilizationOverride != null ? r.utilizationOverride / 100 : calcUtilization(p.demandLevel, r.pulsesPerDay);
+  return calcDailyBudget(p, r) * ut;
 }
 function calcPricesAfterDiscount(p) {
   const d = (p.discountPct || 0) / 100;
@@ -1143,11 +1144,14 @@ function ProductForm({
   }, TYPES.map(t => /*#__PURE__*/React.createElement("option", {
     key: t
   }, t)))), /*#__PURE__*/React.createElement(Field, {
-    label: "BP Regular price"
+    label: "BP Regular price",
+    hint: f.type === "Premium" ? "Not applicable for Premium products" : undefined
   }, /*#__PURE__*/React.createElement(Input, {
     type: "number",
-    value: f.bpRegular,
-    onChange: e => set("bpRegular", e.target.value)
+    value: f.type === "Premium" ? "" : f.bpRegular,
+    onChange: e => set("bpRegular", e.target.value),
+    disabled: f.type === "Premium",
+    placeholder: f.type === "Premium" ? "N/A — Premium only" : undefined
   })), /*#__PURE__*/React.createElement(Field, {
     label: "BP Premium price"
   }, /*#__PURE__*/React.createElement(Input, {
@@ -1253,12 +1257,17 @@ function AllocationForm({
     (existing || []).forEach(r => {
       m[r.productId] = {
         pulsesPerDay: r.pulsesPerDay,
-        qtyPerPulse: r.qtyPerPulse
+        qtyPerPulse: r.qtyPerPulse,
+        active: r.active !== false,
+        utilizationOverride: r.utilizationOverride ?? null
       };
     });
     return m;
   });
   const [selProd, setSelProd] = useState("");
+  const [searchName, setSearchName] = useState("");
+  const [searchPrice, setSearchPrice] = useState("");
+  const [filterType, setFilterType] = useState("All");
   const [selRaffles, setSelRaffles] = useState(() => new Set(raffleCountries && raffleCountries[country] || []));
   const toggleRaffle = rid => setSelRaffles(prev => {
     const s = new Set(prev);
@@ -1266,7 +1275,13 @@ function AllocationForm({
     return s;
   });
   const allocIds = Object.keys(rows).map(Number);
-  const unallocated = products.filter(p => !allocIds.includes(p.id));
+  const unallocated = products.filter(p => {
+    if (allocIds.includes(p.id)) return false;
+    if (searchName.trim() && !p.brand.toLowerCase().includes(searchName.toLowerCase())) return false;
+    if (searchPrice.trim() && !String(p.priceToBuffLocal).includes(searchPrice.trim())) return false;
+    if (filterType !== "All" && p.type !== filterType) return false;
+    return true;
+  });
   function addProduct() {
     if (!selProd) return;
     const pid = parseInt(selProd);
@@ -1274,7 +1289,9 @@ function AllocationForm({
       ...r,
       [pid]: {
         pulsesPerDay: 2,
-        qtyPerPulse: 5
+        qtyPerPulse: 5,
+        active: true,
+        utilizationOverride: null
       }
     }));
     setSelProd("");
@@ -1297,9 +1314,27 @@ function AllocationForm({
       return n;
     });
   }
+  function toggleActive(pid) {
+    setRows(r => ({
+      ...r,
+      [pid]: {
+        ...r[pid],
+        active: !(r[pid].active !== false)
+      }
+    }));
+  }
+  function updUtil(pid, v) {
+    setRows(r => ({
+      ...r,
+      [pid]: {
+        ...r[pid],
+        utilizationOverride: v === "" || v === null || v === undefined ? null : Math.min(100, Math.max(0, parseInt(v) || 0))
+      }
+    }));
+  }
   const totals = allocIds.reduce((acc, pid) => {
     const p = products.find(x => x.id === pid);
-    if (!p) return acc;
+    if (!p || rows[pid].active === false) return acc;
     const r = rows[pid];
     return {
       planned: acc.planned + calcDailyBudget(p, r),
@@ -1336,9 +1371,73 @@ function AllocationForm({
     }
   }, "\u26A0 No products in catalog yet \u2014 go to the ", /*#__PURE__*/React.createElement("strong", null, "Allocate"), " tab to add products first.") : /*#__PURE__*/React.createElement("div", {
     style: {
-      display: "flex",
-      gap: 10,
       marginBottom: 20
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr 1fr",
+      gap: 8,
+      marginBottom: 8
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      fontWeight: 700,
+      color: "#555",
+      letterSpacing: "0.06em",
+      textTransform: "uppercase",
+      marginBottom: 4
+    }
+  }, "Name"), /*#__PURE__*/React.createElement("input", {
+    placeholder: "e.g. Steam",
+    value: searchName,
+    onChange: e => { setSearchName(e.target.value); setSelProd(""); },
+    style: {
+      ...inputStyle,
+      width: "100%",
+      boxSizing: "border-box"
+    }
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      fontWeight: 700,
+      color: "#555",
+      letterSpacing: "0.06em",
+      textTransform: "uppercase",
+      marginBottom: 4
+    }
+  }, "Price"), /*#__PURE__*/React.createElement("input", {
+    placeholder: "e.g. 10",
+    value: searchPrice,
+    onChange: e => { setSearchPrice(e.target.value); setSelProd(""); },
+    style: {
+      ...inputStyle,
+      width: "100%",
+      boxSizing: "border-box"
+    }
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      fontWeight: 700,
+      color: "#555",
+      letterSpacing: "0.06em",
+      textTransform: "uppercase",
+      marginBottom: 4
+    }
+  }, "Type"), /*#__PURE__*/React.createElement(Select, {
+    value: filterType,
+    onChange: e => { setFilterType(e.target.value); setSelProd(""); },
+    style: {
+      ...inputStyle,
+      width: "100%"
+    }
+  }, ["All", "Regular", "Premium"].map(t => /*#__PURE__*/React.createElement("option", {
+    key: t
+  }, t))))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 10
     }
   }, /*#__PURE__*/React.createElement(Select, {
     value: selProd,
@@ -1352,11 +1451,11 @@ function AllocationForm({
   }, unallocated.length === 0 ? "All catalog products already added" : "Choose a product to add to this country…"), unallocated.map(p => /*#__PURE__*/React.createElement("option", {
     key: p.id,
     value: p.id
-  }, usd(calcPriceUSD(p)), " ", p.brand, " (", p.type, ") \xB7 ", p.demandLevel, " demand"))), /*#__PURE__*/React.createElement(Btn, {
+  }, p.priceToBuffLocal, " ", p.currency || "USD", " \u2014 ", p.brand, " (", p.type, ") \xB7 ", p.demandLevel, " demand"))), /*#__PURE__*/React.createElement(Btn, {
     variant: "success",
     onClick: addProduct,
     disabled: !selProd || unallocated.length === 0
-  }, /*#__PURE__*/React.createElement(Icon.plus, null), " Add")), allocIds.length > 0 ? /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(Icon.plus, null), " Add"))), allocIds.length > 0 ? /*#__PURE__*/React.createElement("div", {
     style: {
       overflowX: "auto"
     }
@@ -1366,7 +1465,7 @@ function AllocationForm({
       borderCollapse: "collapse",
       fontSize: 12
     }
-  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, [TH("Product"), TH("Demand"), TH("Pulses/day"), TH("Qty/pulse"), TH("Daily Qty"), TH("Utilization"), THp("Planned Daily"), THr("Real Daily")], /*#__PURE__*/React.createElement("th", {
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, [TH("Product"), TH("Price"), TH("Demand"), TH("Pulses/day"), TH("Qty/pulse"), TH("Daily Qty"), TH("Utilization"), THp("Planned Daily"), THr("Real Daily"), TH("Status")], /*#__PURE__*/React.createElement("th", {
     style: {
       borderBottom: "1px solid #1a1a1a",
       width: 36
@@ -1380,13 +1479,15 @@ function AllocationForm({
       const r = rows[pid];
       const dq = calcDailyQty(r);
       const db = calcDailyBudget(p, r);
-      const ut = calcUtilization(p.demandLevel, r.pulsesPerDay);
+      const autoUt = calcUtilization(p.demandLevel, r.pulsesPerDay);
+      const ut = r.utilizationOverride != null ? r.utilizationOverride / 100 : autoUt;
       const rd = db * ut;
       const intervalH = r.pulsesPerDay > 0 ? (24 / r.pulsesPerDay).toFixed(1) : "—";
       return /*#__PURE__*/React.createElement("tr", {
         key: pid,
         style: {
-          borderBottom: "1px solid #111"
+          borderBottom: "1px solid #111",
+          opacity: rows[pid].active !== false ? 1 : 0.35
         }
       }, /*#__PURE__*/React.createElement("td", {
         style: {
@@ -1404,6 +1505,22 @@ function AllocationForm({
           marginTop: 2
         }
       }, p.type, " \xB7 ", p.provider)), /*#__PURE__*/React.createElement("td", {
+        style: {
+          padding: "10px 10px",
+          whiteSpace: "nowrap"
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontWeight: 700,
+          color: "#f1f5f9"
+        }
+      }, p.priceToBuffLocal), " ", /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 10,
+          color: "#888",
+          fontWeight: 600
+        }
+      }, p.currency || "USD")), /*#__PURE__*/React.createElement("td", {
         style: {
           padding: "10px 10px"
         }
@@ -1464,12 +1581,50 @@ function AllocationForm({
         }
       }, dq), /*#__PURE__*/React.createElement("td", {
         style: {
-          padding: "10px 10px",
-          minWidth: 110
+          padding: "8px 10px",
+          minWidth: 120
         }
       }, /*#__PURE__*/React.createElement(UtilBar, {
         util: ut
-      })), /*#__PURE__*/React.createElement("td", {
+      }), /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "flex",
+          alignItems: "center",
+          gap: 4,
+          marginTop: 5
+        }
+      }, /*#__PURE__*/React.createElement("input", {
+        type: "number",
+        min: 0,
+        max: 100,
+        placeholder: Math.round(autoUt * 100),
+        value: r.utilizationOverride != null ? r.utilizationOverride : "",
+        onChange: e => updUtil(pid, e.target.value),
+        style: {
+          ...inputStyle,
+          width: 46,
+          padding: "2px 5px",
+          textAlign: "center",
+          fontSize: 10
+        }
+      }), /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 10,
+          color: "#555"
+        }
+      }, "%"), r.utilizationOverride != null && /*#__PURE__*/React.createElement("button", {
+        onClick: () => updUtil(pid, null),
+        title: "Reset to auto",
+        style: {
+          background: "none",
+          border: "none",
+          color: "#888",
+          cursor: "pointer",
+          fontSize: 11,
+          padding: 0,
+          lineHeight: 1
+        }
+      }, "\u21BA"))), /*#__PURE__*/React.createElement("td", {
         style: {
           padding: "10px 10px",
           color: "#444",
@@ -1482,6 +1637,32 @@ function AllocationForm({
           color: G
         }
       }, usd(rd)), /*#__PURE__*/React.createElement("td", {
+        style: {
+          padding: "6px 8px"
+        }
+      }, /*#__PURE__*/React.createElement("button", {
+        onClick: () => toggleActive(pid),
+        title: rows[pid].active !== false ? "Deactivate" : "Activate",
+        style: {
+          background: rows[pid].active !== false ? "rgba(200,255,0,0.12)" : "rgba(80,80,80,0.15)",
+          border: `1px solid ${rows[pid].active !== false ? "rgba(200,255,0,0.35)" : "#333"}`,
+          color: rows[pid].active !== false ? G : "#555",
+          cursor: "pointer",
+          padding: "3px 8px",
+          borderRadius: 4,
+          fontSize: 10,
+          fontWeight: 700,
+          display: "flex",
+          alignItems: "center",
+          gap: 4,
+          fontFamily: "inherit",
+          whiteSpace: "nowrap"
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 7
+        }
+      }, "\u25CF"), rows[pid].active !== false ? "ON" : "OFF")), /*#__PURE__*/React.createElement("td", {
         style: {
           padding: "10px 10px"
         }
@@ -1502,7 +1683,7 @@ function AllocationForm({
       const pids = allocIds.filter(pid => {
         const p = products.find(x => x.id === pid);
         return p && (p.purpose || "MP") === pu;
-      });
+      }).sort((a, b) => (rows[b].active !== false ? 1 : 0) - (rows[a].active !== false ? 1 : 0));
       if (!pids.length) return null;
       const puColor = purposeColor(pu);
       const secPlanned = pids.reduce((s, pid) => {
@@ -1520,7 +1701,7 @@ function AllocationForm({
           background: "#0a0a0a"
         }
       }, /*#__PURE__*/React.createElement("td", {
-        colSpan: 9,
+        colSpan: 11,
         style: {
           padding: "7px 10px"
         }
@@ -1541,7 +1722,7 @@ function AllocationForm({
           background: "#080808"
         }
       }, /*#__PURE__*/React.createElement("td", {
-        colSpan: 6,
+        colSpan: 7,
         style: {
           padding: "7px 10px",
           fontSize: 11,
@@ -1562,7 +1743,7 @@ function AllocationForm({
           fontWeight: 800,
           fontSize: 11
         }
-      }, usd(secReal)), /*#__PURE__*/React.createElement("td", null)));
+      }, usd(secReal)), /*#__PURE__*/React.createElement("td", null), /*#__PURE__*/React.createElement("td", null)));
     });
   })())) : /*#__PURE__*/React.createElement("div", {
     style: {
@@ -1678,7 +1859,9 @@ function AllocationForm({
       onSave(allocIds.map(pid => ({
         productId: pid,
         pulsesPerDay: rows[pid].pulsesPerDay,
-        qtyPerPulse: rows[pid].qtyPerPulse
+        qtyPerPulse: rows[pid].qtyPerPulse,
+        active: rows[pid].active !== false,
+        utilizationOverride: rows[pid].utilizationOverride ?? null
       })));
     }
   }, "Save allocations")));
@@ -1694,11 +1877,11 @@ function OverviewTab({
     const rows = allocs[c] || [];
     const planned = rows.reduce((s, r) => {
       const p = products.find(x => x.id === r.productId);
-      return s + (p ? calcDailyBudget(p, r) : 0);
+      return s + (p && r.active !== false ? calcDailyBudget(p, r) : 0);
     }, 0);
     const real = rows.reduce((s, r) => {
       const p = products.find(x => x.id === r.productId);
-      return s + (p ? calcRealDaily(p, r) : 0);
+      return s + (p && r.active !== false ? calcRealDaily(p, r) : 0);
     }, 0);
     return {
       country: c,
@@ -1718,7 +1901,7 @@ function OverviewTab({
   COUNTRIES.forEach(c => {
     (allocs[c] || []).forEach(r => {
       const p = products.find(x => x.id === r.productId);
-      if (!p) return;
+      if (!p || r.active === false) return;
       if (!brandMap[p.brand]) brandMap[p.brand] = {
         planned: 0,
         real: 0,
@@ -2033,11 +2216,14 @@ function ProductsTab({
   products,
   setProducts,
   allocs,
+  setAllocs,
   setTab,
   raffles,
   setRaffles,
-  setAllocateMode
+  setAllocateMode,
+  extraCountries
 }) {
+  const allCountries = [...COUNTRIES, ...(extraCountries || [])];
   const [subView, setSubView] = useState("mp");
   const [modal, setModal] = useState(null);
   const [filterCat, setFilterCat] = useState("All");
@@ -2066,14 +2252,14 @@ function ProductsTab({
 
   // Countries allocated per product
   function getCountries(pid) {
-    return COUNTRIES.filter(c => (allocs[c] || []).some(r => r.productId === pid));
+    return allCountries.filter(c => (allocs[c] || []).some(r => r.productId === pid));
   }
 
   // Bar chart: monthly real budget by brand
   const brandBudgets = useMemo(() => {
     const map = {};
     products.forEach(p => {
-      const total = COUNTRIES.reduce((s, c) => {
+      const total = allCountries.reduce((s, c) => {
         return s + (allocs[c] || []).filter(r => r.productId === p.id).reduce((ss, r) => ss + calcRealDaily(p, r) * 30.5, 0);
       }, 0);
       map[p.brand] = (map[p.brand] || 0) + total;
@@ -2124,6 +2310,7 @@ function ProductsTab({
       whiteSpace: "nowrap"
     }
   }, s);
+  const globalAllocRows = allocs["GLOBAL"] || [];
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
@@ -2454,7 +2641,7 @@ function ProductsTab({
     style: {
       borderBottom: "1px solid #1a1a1a"
     }
-  }, [TH("Brand"), TH("Category"), TH("USD Price"), TH("Provider"), TH("Type"), TH("Demand"), TH("BP Regular"), TH("BP Premium"), TH("Disc."), TH("Countries", "#c8ff00"), TH("")])), /*#__PURE__*/React.createElement("tbody", null, filtered.map(p => {
+  }, [TH("Brand"), TH("Category"), TH("Local Price"), TH("USD Price"), TH("Provider"), TH("Type"), TH("Demand"), TH("BP Regular"), TH("BP Premium"), TH("Disc."), TH("Countries", "#c8ff00"), TH("")])), /*#__PURE__*/React.createElement("tbody", null, filtered.map(p => {
     const {
       reg,
       prem
@@ -2478,6 +2665,18 @@ function ProductsTab({
     }, /*#__PURE__*/React.createElement(Badge, {
       variant: p.category.toLowerCase()
     }, p.category)), /*#__PURE__*/React.createElement("td", {
+      style: {
+        padding: "10px 12px",
+        fontWeight: 700,
+        color: "#f1f5f9"
+      }
+    }, p.priceToBuffLocal, " ", /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 10,
+        color: "#555",
+        fontWeight: 600
+      }
+    }, p.currency || "USD")), /*#__PURE__*/React.createElement("td", {
       style: {
         padding: "10px 12px",
         fontWeight: 700,
@@ -2601,7 +2800,7 @@ function ProductsTab({
     initial: modal === "add" ? null : modal,
     onSave: save,
     onClose: () => setModal(null)
-  }))), " ", subView === "raffles" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  })), globalAllocRows.length > 0 && /*#__PURE__*/React.createElement("div", { style: { marginTop: 28, paddingTop: 20, borderTop: "1px solid #1a1a1a" } }, /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 14 } }, /*#__PURE__*/React.createElement("span", { style: { fontWeight: 800, color: "#38bdf8", background: "rgba(56,189,248,0.1)", border: "1px solid rgba(56,189,248,0.3)", padding: "2px 10px", borderRadius: 4, fontSize: 11, letterSpacing: "0.05em" } }, "GLOBAL"), /*#__PURE__*/React.createElement("span", { style: { fontSize: 13, color: "#444" } }, globalAllocRows.filter(r => r.active !== false && products.find(p => p.id === r.productId)).length, " products")), /*#__PURE__*/React.createElement("div", { style: { background: "#0d0d0d", border: "1px solid #1a1a1a", borderRadius: 12, overflow: "hidden" } }, /*#__PURE__*/React.createElement("div", { style: { overflowX: "auto" } }, /*#__PURE__*/React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", fontSize: 13 } }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", { style: { borderBottom: "1px solid #1a1a1a" } }, [TH("Brand"), TH("Category"), TH("Local Price"), TH("USD Price"), TH("Provider"), TH("Type"), TH("Demand"), TH("BP Regular"), TH("BP Premium"), TH("Disc."), TH("GLOBAL", "#38bdf8")])), /*#__PURE__*/React.createElement("tbody", null, globalAllocRows.map(r => { const p = products.find(x => x.id === r.productId); if (!p) return null; const { reg, prem } = calcPricesAfterDiscount(p); return /*#__PURE__*/React.createElement("tr", { key: r.productId, style: { borderBottom: "1px solid #111", opacity: r.active === false ? 0.35 : 1 } }, /*#__PURE__*/React.createElement("td", { style: { padding: "14px 16px", fontWeight: 800, color: "#f1f5f9" } }, p.brand), /*#__PURE__*/React.createElement("td", { style: { padding: "10px 12px" } }, /*#__PURE__*/React.createElement(Badge, { variant: p.category.toLowerCase() }, p.category)), /*#__PURE__*/React.createElement("td", { style: { padding: "10px 12px", fontWeight: 700, color: "#f1f5f9" } }, p.priceToBuffLocal, " ", /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: "#555", fontWeight: 600 } }, p.currency || "USD")), /*#__PURE__*/React.createElement("td", { style: { padding: "10px 12px", fontWeight: 700, color: "#f1f5f9" } }, usd(calcPriceUSD(p))), /*#__PURE__*/React.createElement("td", { style: { padding: "10px 12px" } }, /*#__PURE__*/React.createElement(Badge, { variant: p.provider.toLowerCase() }, p.provider)), /*#__PURE__*/React.createElement("td", { style: { padding: "10px 12px" } }, /*#__PURE__*/React.createElement(Badge, { variant: p.type.toLowerCase() }, p.type)), /*#__PURE__*/React.createElement("td", { style: { padding: "10px 12px" } }, /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, fontWeight: 700, color: demandColor(p.demandLevel), background: demandBg(p.demandLevel), padding: "2px 7px", borderRadius: 4, border: `1px solid ${demandColor(p.demandLevel)}33` } }, p.demandLevel)), /*#__PURE__*/React.createElement("td", { style: { padding: "10px 12px", color: "#555" } }, num(p.bpRegular)), /*#__PURE__*/React.createElement("td", { style: { padding: "10px 12px", color: "#555" } }, p.bpPremium ? num(p.bpPremium) : "\u2014"), /*#__PURE__*/React.createElement("td", { style: { padding: "10px 12px", color: "#fb923c", fontWeight: 700 } }, p.discountPct, "%"), /*#__PURE__*/React.createElement("td", { style: { padding: "10px 16px" } }, /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, fontWeight: 700, color: "#38bdf8", background: "rgba(56,189,248,0.1)", border: "1px solid rgba(56,189,248,0.3)", padding: "2px 6px", borderRadius: 4 } }, "GLOBAL"))); }))))))), " ", subView === "raffles" && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       justifyContent: "space-between",
@@ -2769,30 +2968,93 @@ function CountriesTab({
   setAllocs,
   raffles,
   raffleCountries,
-  setRaffleCountries
+  setRaffleCountries,
+  extraCountries,
+  setExtraCountries
 }) {
   const [selected, setSelected] = useState(null);
   const [modal, setModal] = useState(false);
-  const countryData = COUNTRIES.map(c => {
+  const [addingCountry, setAddingCountry] = useState(false);
+  const [newCountryCode, setNewCountryCode] = useState("");
+  const allCountries = [...COUNTRIES, ...(extraCountries || [])];
+  const countryData = allCountries.map(c => {
     const rows = allocs[c] || [];
+    const validRows = rows.filter(r => products.find(x => x.id === r.productId));
     const planned = rows.reduce((s, r) => {
       const p = products.find(x => x.id === r.productId);
-      return s + (p ? calcDailyBudget(p, r) : 0);
+      return s + (p && r.active !== false ? calcDailyBudget(p, r) : 0);
     }, 0);
     const real = rows.reduce((s, r) => {
       const p = products.find(x => x.id === r.productId);
-      return s + (p ? calcRealDaily(p, r) : 0);
+      return s + (p && r.active !== false ? calcRealDaily(p, r) : 0);
     }, 0);
     return {
       country: c,
       rows,
+      validCount: validRows.length,
       planned,
       real,
       plannedM: planned * 30.5,
       realM: real * 30.5
     };
   });
-  const sel = selected ? countryData.find(c => c.country === selected) : null;
+  const gRows = allocs["GLOBAL"] || [];
+  const gPlanned = gRows.reduce((s, r) => { const p = products.find(x => x.id === r.productId); return s + (p && r.active !== false ? calcDailyBudget(p, r) : 0); }, 0);
+  const gReal = gRows.reduce((s, r) => { const p = products.find(x => x.id === r.productId); return s + (p && r.active !== false ? calcRealDaily(p, r) : 0); }, 0);
+  const globalData = { country: "GLOBAL", rows: gRows, validCount: gRows.filter(r => products.find(x => x.id === r.productId)).length, planned: gPlanned, real: gReal, plannedM: gPlanned * 30.5, realM: gReal * 30.5 };
+  const sel = selected ? (selected === "GLOBAL" ? globalData : countryData.find(c => c.country === selected)) : null;
+  function delAlloc(pid) {
+    setAllocs(a => ({
+      ...a,
+      [selected]: (a[selected] || []).filter(r => r.productId !== pid)
+    }));
+  }
+  function toggleActive(pid) {
+    setAllocs(a => ({
+      ...a,
+      [selected]: (a[selected] || []).map(r =>
+        r.productId === pid ? { ...r, active: !(r.active !== false) } : r
+      )
+    }));
+  }
+  function buildGlobalSection(selC, prods, als) {
+    if (!selC || selC === "GLOBAL") return null;
+    const globalRows = (als["GLOBAL"] || []).filter(gr => gr.active !== false && prods.find(p => p.id === gr.productId));
+    if (!globalRows.length) return null;
+    const TH2 = (s, c = "#444") => /*#__PURE__*/React.createElement("th", {
+      style: { textAlign: "left", padding: "10px 16px", color: c, fontWeight: 700, fontSize: 11, letterSpacing: "0.05em", textTransform: "uppercase", whiteSpace: "nowrap", borderBottom: "1px solid #1a1a1a" }
+    }, s);
+    const THp2 = s => TH2(s, "#555");
+    const THr2 = s => TH2(s, G);
+    return /*#__PURE__*/React.createElement("div", {
+      style: { borderTop: "1px solid #1a1a1a" }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: { padding: "10px 20px", borderBottom: "1px solid #0d0d0d", display: "flex", alignItems: "center", gap: 10 }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: { fontSize: 10, fontWeight: 800, color: "#38bdf8", background: "rgba(56,189,248,0.1)", border: "1px solid rgba(56,189,248,0.3)", padding: "2px 10px", borderRadius: 4, letterSpacing: "0.05em" }
+    }, "GLOBAL"), /*#__PURE__*/React.createElement("span", {
+      style: { fontSize: 11, color: "#444" }
+    }, "Inherited products \u2014 manage in GLOBAL")), /*#__PURE__*/React.createElement("div", {
+      style: { overflowX: "auto" }
+    }, /*#__PURE__*/React.createElement("table", {
+      style: { width: "100%", borderCollapse: "collapse", fontSize: 12 }
+    }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, [TH2("Brand"), TH2("Price"), TH2("Demand"), TH2("Pulses/day"), TH2("Qty/pulse"), TH2("Daily Qty"), TH2("Utilization"), THp2("Planned"), THr2("Real")])), /*#__PURE__*/React.createElement("tbody", null, globalRows.map(gr => {
+      const gp = prods.find(x => x.id === gr.productId);
+      if (!gp) return null;
+      const gut = gr.utilizationOverride != null ? gr.utilizationOverride / 100 : calcUtilization(gp.demandLevel, gr.pulsesPerDay);
+      const gdb = calcDailyBudget(gp, gr);
+      return /*#__PURE__*/React.createElement("tr", {
+        key: gr.productId,
+        style: { borderBottom: "1px solid #0d0d0d" }
+      }, /*#__PURE__*/React.createElement("td", {
+        style: { padding: "10px 16px" }
+      }, /*#__PURE__*/React.createElement("div", { style: { fontWeight: 800, color: "#f1f5f9" } }, gp.brand), /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: "#333", marginTop: 1 } }, gp.type)), /*#__PURE__*/React.createElement("td", {
+        style: { padding: "10px 16px", whiteSpace: "nowrap" }
+      }, /*#__PURE__*/React.createElement("span", { style: { fontWeight: 700, color: "#f1f5f9" } }, gp.priceToBuffLocal), " ", /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, color: "#888" } }, gp.currency || "USD")), /*#__PURE__*/React.createElement("td", {
+        style: { padding: "10px 16px" }
+      }, /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, fontWeight: 700, color: demandColor(gp.demandLevel), background: demandBg(gp.demandLevel), padding: "2px 6px", borderRadius: 4, border: `1px solid ${demandColor(gp.demandLevel)}33` } }, gp.demandLevel)), /*#__PURE__*/React.createElement("td", { style: { padding: "10px 16px", color: "#f1f5f9", fontWeight: 700, textAlign: "center" } }, gr.pulsesPerDay), /*#__PURE__*/React.createElement("td", { style: { padding: "10px 16px", color: "#f1f5f9", fontWeight: 700, textAlign: "center" } }, gr.qtyPerPulse), /*#__PURE__*/React.createElement("td", { style: { padding: "10px 16px", color: G, fontWeight: 800, textAlign: "center", fontSize: 14 } }, calcDailyQty(gr)), /*#__PURE__*/React.createElement("td", { style: { padding: "8px 16px", minWidth: 100 } }, /*#__PURE__*/React.createElement(UtilBar, { util: gut }), gr.utilizationOverride != null && /*#__PURE__*/React.createElement("div", { style: { fontSize: 9, fontWeight: 700, color: "#38bdf8", marginTop: 3 } }, "MANUAL")), /*#__PURE__*/React.createElement("td", { style: { padding: "10px 16px", color: "#444", fontWeight: 600 } }, usd(gdb)), /*#__PURE__*/React.createElement("td", { style: { padding: "10px 16px", fontWeight: 800, color: G } }, usd(gdb * gut)));
+    })))));
+  }
   const TH = (s, c = "#444") => /*#__PURE__*/React.createElement("th", {
     style: {
       textAlign: "left",
@@ -2856,21 +3118,103 @@ function CountriesTab({
     style: {
       fontSize: 13,
       fontWeight: 800,
-      color: c.rows.length > 0 ? "#f1f5f9" : "#2a2a2a"
+      color: c.validCount > 0 ? "#f1f5f9" : "#2a2a2a"
     }
-  }, c.country), c.rows.length > 0 && /*#__PURE__*/React.createElement("div", {
+  }, c.country), c.validCount > 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 10,
       color: "#444",
       marginTop: 1
     }
-  }, c.rows.length, " products")), c.rows.length > 0 && /*#__PURE__*/React.createElement("div", {
+  }, c.validCount, " products")), c.validCount > 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 10,
       fontWeight: 800,
       color: G
     }
-  }, usd(c.real), "/d")))), /*#__PURE__*/React.createElement("div", null, sel ? /*#__PURE__*/React.createElement("div", {
+  }, usd(c.real), "/d"))), /*#__PURE__*/React.createElement("div", { onClick: () => setSelected("GLOBAL"), style: { padding: "11px 14px", cursor: "pointer", borderTop: "2px solid #1a1a1a", background: selected === "GLOBAL" ? "rgba(56,189,248,0.05)" : "transparent", display: "flex", alignItems: "center", justifyContent: "space-between" } }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("span", { style: { fontWeight: 800, color: "#38bdf8", background: "rgba(56,189,248,0.1)", border: "1px solid rgba(56,189,248,0.3)", padding: "2px 8px", borderRadius: 4, fontSize: 11, letterSpacing: "0.05em" } }, "GLOBAL"), globalData.validCount > 0 && /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: "#444", marginTop: 1 } }, globalData.validCount, " products")), globalData.validCount > 0 && /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, fontWeight: 800, color: "#38bdf8" } }, usd(globalData.real), "/d")), addingCountry ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "8px 10px",
+      borderTop: "1px solid #1a1a1a",
+      display: "flex",
+      gap: 4,
+      boxSizing: "border-box"
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    autoFocus: true,
+    maxLength: 6,
+    placeholder: "e.g. BR",
+    value: newCountryCode,
+    onChange: e => setNewCountryCode(e.target.value.toUpperCase()),
+    onKeyDown: e => {
+      if (e.key === "Enter") {
+        const code = newCountryCode.trim();
+        if (code && !allCountries.includes(code)) {
+          setExtraCountries(ec => [...ec, code]);
+          setSelected(code);
+        }
+        setNewCountryCode("");
+        setAddingCountry(false);
+      }
+      if (e.key === "Escape") {
+        setNewCountryCode("");
+        setAddingCountry(false);
+      }
+    },
+    style: {
+      flex: 1,
+      minWidth: 0,
+      background: "#080808",
+      border: "1px solid #333",
+      borderRadius: 6,
+      color: "#f1f5f9",
+      padding: "5px 6px",
+      fontSize: 11,
+      fontFamily: "inherit",
+      outline: "none"
+    }
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: () => {
+      const code = newCountryCode.trim();
+      if (code && !allCountries.includes(code)) {
+        setExtraCountries(ec => [...ec, code]);
+        setSelected(code);
+      }
+      setNewCountryCode("");
+      setAddingCountry(false);
+    },
+    style: {
+      flexShrink: 0,
+      background: G,
+      border: "none",
+      borderRadius: 6,
+      color: "#000",
+      padding: "5px 8px",
+      fontSize: 11,
+      fontWeight: 800,
+      cursor: "pointer",
+      fontFamily: "inherit"
+    }
+  }, "Add")) : /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "10px 14px",
+      borderTop: "1px solid #1a1a1a"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setAddingCountry(true),
+    style: {
+      width: "100%",
+      background: "transparent",
+      border: "1px dashed #444",
+      borderRadius: 6,
+      color: "#888",
+      padding: "7px",
+      fontSize: 11,
+      fontWeight: 700,
+      cursor: "pointer",
+      fontFamily: "inherit"
+    }
+  }, "+ Add Country"))), /*#__PURE__*/React.createElement("div", null, sel ? /*#__PURE__*/React.createElement("div", {
     style: {
       background: "#0d0d0d",
       border: "1px solid #1a1a1a",
@@ -2906,7 +3250,7 @@ function CountriesTab({
       color: "#444",
       marginLeft: 12
     }
-  }, sel.rows.length, " product", sel.rows.length !== 1 ? "s" : "", " allocated")), /*#__PURE__*/React.createElement("button", {
+  }, sel.validCount, " product", sel.validCount !== 1 ? "s" : "", " allocated")), /*#__PURE__*/React.createElement("button", {
     onClick: () => setModal(true),
     style: {
       background: "#1a1a1a",
@@ -2950,7 +3294,7 @@ function CountriesTab({
       fontWeight: 900,
       color
     }
-  }, v)))), sel.rows.length > 0 ? /*#__PURE__*/React.createElement("div", {
+  }, v)))), sel.validCount > 0 ? /*#__PURE__*/React.createElement("div", {
     style: {
       overflowX: "auto"
     }
@@ -2961,7 +3305,7 @@ function CountriesTab({
       fontSize: 12
     }
   }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", {
-    colSpan: 7,
+    colSpan: 9,
     style: {
       borderBottom: "1px solid #111",
       padding: "4px 0"
@@ -2993,11 +3337,21 @@ function CountriesTab({
       borderBottom: "1px solid #111",
       borderLeft: "1px solid #111"
     }
-  }, "REAL")), /*#__PURE__*/React.createElement("tr", {
+  }, "REAL"), /*#__PURE__*/React.createElement("th", {
+    style: {
+      borderBottom: "1px solid #111",
+      width: 36
+    }
+  })), /*#__PURE__*/React.createElement("tr", {
     style: {
       borderBottom: "1px solid #1a1a1a"
     }
-  }, [TH("Brand"), TH("Demand"), TH("Pulses/day"), TH("Qty/pulse"), TH("Daily Qty"), TH("Interval"), TH("Utilization"), THp("Daily"), THr("Daily"), THp("Monthly"), THr("Monthly")])), (() => {
+  }, [TH("Brand"), TH("Price"), TH("Demand"), TH("Pulses/day"), TH("Qty/pulse"), TH("Daily Qty"), TH("Interval"), TH("Utilization"), THp("Daily"), THr("Daily"), THp("Monthly"), THr("Monthly"), TH("Status")], /*#__PURE__*/React.createElement("th", {
+    style: {
+      borderBottom: "1px solid #1a1a1a",
+      width: 36
+    }
+  }))), (() => {
     const PURPOSES = ["MP", "Raffles", "Buff Pass"];
     const purposeColor = pu => pu === "MP" ? G : pu === "Raffles" ? "#a78bfa" : "#38bdf8";
     const renderRow = r => {
@@ -3006,13 +3360,14 @@ function CountriesTab({
       const dq = calcDailyQty(r);
       const db = calcDailyBudget(p, r);
       const rd = calcRealDaily(p, r);
-      const ut = calcUtilization(p.demandLevel, r.pulsesPerDay);
+      const ut = r.utilizationOverride != null ? r.utilizationOverride / 100 : calcUtilization(p.demandLevel, r.pulsesPerDay);
       const ivh = (r.pulsesPerDay > 0 ? (24 / r.pulsesPerDay).toFixed(1) : "—") + "h";
       const pu = p.purpose || "MP";
       return /*#__PURE__*/React.createElement("tr", {
         key: r.productId,
         style: {
-          borderBottom: "1px solid #0d0d0d"
+          borderBottom: "1px solid #0d0d0d",
+          opacity: r.active !== false ? 1 : 0.35
         }
       }, /*#__PURE__*/React.createElement("td", {
         style: {
@@ -3030,6 +3385,22 @@ function CountriesTab({
           marginTop: 1
         }
       }, p.type)), /*#__PURE__*/React.createElement("td", {
+        style: {
+          padding: "10px 16px",
+          whiteSpace: "nowrap"
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontWeight: 700,
+          color: "#f1f5f9"
+        }
+      }, p.priceToBuffLocal), " ", /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 10,
+          color: "#888",
+          fontWeight: 600
+        }
+      }, p.currency || "USD")), /*#__PURE__*/React.createElement("td", {
         style: {
           padding: "10px 16px"
         }
@@ -3073,12 +3444,20 @@ function CountriesTab({
         }
       }, ivh), /*#__PURE__*/React.createElement("td", {
         style: {
-          padding: "10px 16px",
+          padding: "8px 16px",
           minWidth: 110
         }
       }, /*#__PURE__*/React.createElement(UtilBar, {
         util: ut
-      })), /*#__PURE__*/React.createElement("td", {
+      }), r.utilizationOverride != null && /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 9,
+          fontWeight: 700,
+          color: "#38bdf8",
+          marginTop: 3,
+          letterSpacing: "0.05em"
+        }
+      }, "MANUAL")), /*#__PURE__*/React.createElement("td", {
         style: {
           padding: "10px 16px",
           color: "#444",
@@ -3102,7 +3481,48 @@ function CountriesTab({
           fontWeight: 800,
           color: G
         }
-      }, usd(rd * 30.5)));
+      }, usd(rd * 30.5)), /*#__PURE__*/React.createElement("td", {
+        style: {
+          padding: "6px 8px"
+        }
+      }, /*#__PURE__*/React.createElement("button", {
+        onClick: () => toggleActive(r.productId),
+        title: r.active !== false ? "Deactivate" : "Activate",
+        style: {
+          background: r.active !== false ? "rgba(200,255,0,0.12)" : "rgba(80,80,80,0.15)",
+          border: `1px solid ${r.active !== false ? "rgba(200,255,0,0.35)" : "#333"}`,
+          color: r.active !== false ? G : "#555",
+          cursor: "pointer",
+          padding: "3px 8px",
+          borderRadius: 4,
+          fontSize: 10,
+          fontWeight: 700,
+          display: "flex",
+          alignItems: "center",
+          gap: 4,
+          fontFamily: "inherit",
+          whiteSpace: "nowrap"
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 7
+        }
+      }, "\u25CF"), r.active !== false ? "ON" : "OFF")), /*#__PURE__*/React.createElement("td", {
+        style: {
+          padding: "10px 16px"
+        }
+      }, /*#__PURE__*/React.createElement("button", {
+        onClick: () => delAlloc(r.productId),
+        style: {
+          background: "none",
+          border: "none",
+          color: "#ef4444",
+          cursor: "pointer",
+          padding: 4,
+          borderRadius: 4,
+          display: "flex"
+        }
+      }, /*#__PURE__*/React.createElement(Icon.trash, null))));
     };
     return PURPOSES.map(pu => {
       const rows = sel.rows.filter(r => {
@@ -3117,7 +3537,7 @@ function CountriesTab({
           background: "#0a0a0a"
         }
       }, /*#__PURE__*/React.createElement("td", {
-        colSpan: 11,
+        colSpan: 14,
         style: {
           padding: "8px 16px"
         }
@@ -3132,7 +3552,7 @@ function CountriesTab({
           borderRadius: 4,
           letterSpacing: "0.05em"
         }
-      }, pu))), rows.map(renderRow));
+      }, pu))), [...rows].sort((a, b) => (b.active !== false ? 1 : 0) - (a.active !== false ? 1 : 0)).map(renderRow));
     });
   })(), /*#__PURE__*/React.createElement("tfoot", null, /*#__PURE__*/React.createElement("tr", {
     style: {
@@ -3140,7 +3560,7 @@ function CountriesTab({
       background: TOTAL_BG
     }
   }, /*#__PURE__*/React.createElement("td", {
-    colSpan: 7,
+    colSpan: 8,
     style: {
       padding: "11px 16px",
       fontWeight: 800,
@@ -3170,7 +3590,7 @@ function CountriesTab({
       fontWeight: 900,
       color: TOTAL_C
     }
-  }, usd(sel.realM)))))) : /*#__PURE__*/React.createElement("div", {
+  }, usd(sel.realM)), /*#__PURE__*/React.createElement("td", null), /*#__PURE__*/React.createElement("td", null))))) : /*#__PURE__*/React.createElement("div", {
     style: {
       padding: 40,
       textAlign: "center",
@@ -3332,7 +3752,7 @@ function CountriesTab({
     style: {
       color: "#a78bfa"
     }
-  }, "Allocate"), " tab to add raffles."))) : /*#__PURE__*/React.createElement("div", {
+  }, "Allocate"), " tab to add raffles.")), buildGlobalSection(sel && sel.country, products, allocs)) : /*#__PURE__*/React.createElement("div", {
     style: {
       background: "#0d0d0d",
       border: "1px solid #1a1a1a",
@@ -3891,8 +4311,10 @@ function AllocateTab({
   setRaffles,
   raffleCountries,
   setRaffleCountries,
-  defaultMode
+  defaultMode,
+  extraCountries
 }) {
+  const allCountries = [...COUNTRIES, ...(extraCountries || [])];
   const [mode, setMode] = useState(defaultMode || "mp");
   const BLANK = {
     brand: "",
@@ -3947,7 +4369,7 @@ function AllocateTab({
   });
 
   // ── Validation ─────────────────────────────────────────────────────────────
-  const step1Valid = f.brand.trim() && parseFloat(f.priceToBuffLocal) > 0 && parseFloat(f.bpRegular) > 0;
+  const step1Valid = f.brand.trim() && parseFloat(f.priceToBuffLocal) > 0 && (f.type === "Premium" ? parseFloat(f.bpPremium) > 0 : parseFloat(f.bpRegular) > 0);
 
   // ── Country helpers ────────────────────────────────────────────────────────
   function toggleCountry(c) {
@@ -3965,15 +4387,15 @@ function AllocateTab({
     }
   }
   function toggleAll() {
-    if (selected.length === COUNTRIES.length) {
+    if (selected.length === allCountries.length) {
       setSelected([]);
     } else {
-      setSelected([...COUNTRIES]);
+      setSelected([...allCountries]);
       setCSettings(s => {
         const next = {
           ...s
         };
-        COUNTRIES.forEach(c => {
+        allCountries.forEach(c => {
           if (!next[c]) next[c] = {
             pulsesPerDay: pulses,
             qtyPerPulse: qtyPulse
@@ -4341,13 +4763,15 @@ function AllocateTab({
   }, DEMAND_LEVELS.map(d => /*#__PURE__*/React.createElement("option", {
     key: d
   }, d)))), /*#__PURE__*/React.createElement(Field, {
-    label: "BP Regular Price (Buff Points)"
+    label: "BP Regular Price (Buff Points)",
+    hint: f.type === "Premium" ? "Not applicable for Premium products" : undefined
   }, /*#__PURE__*/React.createElement(Input, {
     type: "number",
     min: 0,
-    value: f.bpRegular,
+    value: f.type === "Premium" ? "" : f.bpRegular,
     onChange: e => set("bpRegular", e.target.value),
-    placeholder: "e.g. 2200"
+    placeholder: f.type === "Premium" ? "N/A \u2014 Premium only" : "e.g. 2200",
+    disabled: f.type === "Premium"
   })), /*#__PURE__*/React.createElement(Field, {
     label: "BP Premium Price",
     hint: "Optional \u2014 leave blank if not applicable"
@@ -4417,7 +4841,7 @@ function AllocateTab({
       marginBottom: 28
     }
   }, /*#__PURE__*/React.createElement(Field, {
-    label: "Pulses per Day",
+    label: "Number of Daily Restocks",
     hint: `Releases one batch every ${intervalH}h — fewer pulses = higher utilization`
   }, /*#__PURE__*/React.createElement(Input, {
     type: "number",
@@ -4426,7 +4850,7 @@ function AllocateTab({
     value: pulses,
     onChange: e => setPulses(Math.max(1, parseInt(e.target.value) || 1))
   })), /*#__PURE__*/React.createElement(Field, {
-    label: "Qty per Pulse",
+    label: "Number of Items to Deactivate",
     hint: `${dailyQty} cards distributed per day total`
   }, /*#__PURE__*/React.createElement(Input, {
     type: "number",
@@ -4512,7 +4936,7 @@ function AllocateTab({
       fontSize: 12,
       fontFamily: "inherit"
     }
-  }, selected.length === COUNTRIES.length ? "Deselect All" : "Select All")), /*#__PURE__*/React.createElement("div", {
+  }, selected.length === allCountries.length ? "Deselect All" : "Select All")), /*#__PURE__*/React.createElement("div", {
     style: {
       background: "#080808",
       border: "1px solid #111",
@@ -4568,7 +4992,7 @@ function AllocateTab({
       padding: "12px 16px",
       borderBottom: "1px solid #1a1a1a"
     }
-  }), TH3("Country"), TH3("Pulses/day"), TH3("Qty/pulse"), TH3("Daily Qty"), TH3("Utilization"), TH3("Daily", "#555"), TH3("Monthly", "#555"), TH3("Daily", G), TH3("Monthly", G))), /*#__PURE__*/React.createElement("tbody", null, COUNTRIES.map(c => {
+  }), TH3("Country"), TH3("Pulses/day"), TH3("Qty/pulse"), TH3("Daily Qty"), TH3("Utilization"), TH3("Daily", "#555"), TH3("Monthly", "#555"), TH3("Daily", G), TH3("Monthly", G))), /*#__PURE__*/React.createElement("tbody", null, (() => { const gSel = selected.includes("GLOBAL"); const gCs = cSettings["GLOBAL"] || { pulsesPerDay: pulses, qtyPerPulse: qtyPulse }; const gUtil = gSel ? calcUtilization(f.demandLevel, gCs.pulsesPerDay) : 0; const gDq = gCs.pulsesPerDay * gCs.qtyPerPulse; const gPlan = priceUSD * gDq; const gReal = gPlan * gUtil; return /*#__PURE__*/React.createElement("tr", { onClick: () => toggleCountry("GLOBAL"), style: { borderBottom: "2px solid #0d1a1a", background: gSel ? "rgba(56,189,248,0.06)" : "#080c0c", cursor: "pointer" } }, /*#__PURE__*/React.createElement("td", { style: { padding: "12px 16px" } }, /*#__PURE__*/React.createElement("div", { style: { width: 18, height: 18, borderRadius: 4, border: `2px solid ${gSel ? "#38bdf8" : "#2a2a2a"}`, background: gSel ? "#38bdf8" : "transparent", display: "flex", alignItems: "center", justifyContent: "center" } }, gSel && /*#__PURE__*/React.createElement("svg", { width: "11", height: "11", viewBox: "0 0 12 12", fill: "none" }, /*#__PURE__*/React.createElement("path", { d: "M2 6l3 3 5-5", stroke: "#0a0a0a", strokeWidth: "2.2", strokeLinecap: "round", strokeLinejoin: "round" })))), /*#__PURE__*/React.createElement("td", { style: { padding: "12px 16px" } }, /*#__PURE__*/React.createElement("span", { style: { fontWeight: 800, color: "#38bdf8", background: "rgba(56,189,248,0.1)", border: "1px solid rgba(56,189,248,0.3)", padding: "2px 10px", borderRadius: 4, fontSize: 11, letterSpacing: "0.05em" } }, "GLOBAL")), /*#__PURE__*/React.createElement("td", { style: { padding: "10px 16px" }, onClick: e => e.stopPropagation() }, gSel ? /*#__PURE__*/React.createElement("input", { type: "number", min: 1, max: 24, value: gCs.pulsesPerDay, onChange: e => updC("GLOBAL", "pulsesPerDay", e.target.value), style: { ...inputStyle, width: 64, padding: "6px 8px", textAlign: "center" } }) : /*#__PURE__*/React.createElement("span", { style: { color: "#222" } }, "\u2014")), /*#__PURE__*/React.createElement("td", { style: { padding: "10px 16px" }, onClick: e => e.stopPropagation() }, gSel ? /*#__PURE__*/React.createElement("input", { type: "number", min: 1, value: gCs.qtyPerPulse, onChange: e => updC("GLOBAL", "qtyPerPulse", e.target.value), style: { ...inputStyle, width: 64, padding: "6px 8px", textAlign: "center" } }) : /*#__PURE__*/React.createElement("span", { style: { color: "#222" } }, "\u2014")), /*#__PURE__*/React.createElement("td", { style: { padding: "12px 16px", fontWeight: 700, color: gSel ? "#f1f5f9" : "#222", textAlign: "center" } }, gSel ? gDq : "\u2014"), /*#__PURE__*/React.createElement("td", { style: { padding: "12px 16px", minWidth: 120 } }, gSel ? /*#__PURE__*/React.createElement(UtilBar, { util: gUtil }) : /*#__PURE__*/React.createElement("span", { style: { color: "#222" } }, "\u2014")), /*#__PURE__*/React.createElement("td", { style: { padding: "12px 16px", color: gSel ? "#555" : "#222", fontWeight: 600 } }, gSel ? usd(gPlan) : "\u2014"), /*#__PURE__*/React.createElement("td", { style: { padding: "12px 16px", color: gSel ? "#555" : "#222", fontWeight: 600 } }, gSel ? usd(gPlan * 30.5) : "\u2014"), /*#__PURE__*/React.createElement("td", { style: { padding: "12px 16px", fontWeight: 700, color: gSel ? "#38bdf8" : "#222" } }, gSel ? usd(gReal) : "\u2014"), /*#__PURE__*/React.createElement("td", { style: { padding: "12px 16px", fontWeight: 700, color: gSel ? "#38bdf8" : "#222" } }, gSel ? usd(gReal * 30.5) : "\u2014")); })(), allCountries.map(c => {
     const isSel = selected.includes(c);
     const cs = cSettings[c] || {
       pulsesPerDay: pulses,
@@ -6000,7 +6424,7 @@ function AnalyticsTab({
     });
     return COUNTRIES.map(c => {
       const rows = allocs[c] || [];
-      const plannedPerDay = rows.reduce((s, r) => s + r.pulsesPerDay * r.qtyPerPulse, 0);
+      const plannedPerDay = (allocs[c] || []).filter(r => r.active !== false).reduce((s, r) => s + r.pulsesPerDay * r.qtyPerPulse, 0);
       const planned = plannedPerDay * days;
       const real = realByCountry[c] || 0;
       const util = planned > 0 ? real / planned : null;
@@ -6487,7 +6911,7 @@ function DashboardTab({
   // Planned budget per country — always available from allocs
   const plannedOnly = useMemo(() => {
     return COUNTRIES.map(c => {
-      const rows = allocs[c] || [];
+      const rows = (allocs[c] || []).filter(r => r.active !== false);
       const planned = rows.reduce((s, a) => {
         const prod = products.find(p => p.id === a.productId);
         return s + a.pulsesPerDay * a.qtyPerPulse * (prod ? calcPriceUSD(prod) : 0) * days;
@@ -6541,7 +6965,7 @@ function DashboardTab({
   // Planned vs actual by vendor (for visualization)
   const plannedByVendor = useMemo(() => {
     const m = {};
-    Object.values(allocs).forEach(cr => cr.forEach(alloc => {
+    Object.values(allocs).forEach(cr => cr.filter(r => r.active !== false).forEach(alloc => {
       const p = products.find(x => x.id === alloc.productId);
       if (!p) return;
       const v = p.vendor || p.provider || "Unknown";
@@ -8100,7 +8524,7 @@ function BudgetOverview({
   const allocFlat = useMemo(() => {
     const res = [];
     Object.entries(allocs).forEach(([country, rows]) => {
-      rows.forEach(r => {
+      (rows || []).filter(r => r.active !== false).forEach(r => {
         const p = products.find(x => x.id === r.productId);
         if (!p) return;
         res.push({
@@ -9613,7 +10037,7 @@ function FinanceRequests({
   const [editTx, setEditTx] = useState(null);
   const plannedByVendor = useMemo(() => {
     const m = {};
-    Object.values(allocs || {}).forEach(cr => cr.forEach(alloc => {
+    Object.values(allocs || {}).forEach(cr => cr.filter(r => r.active !== false).forEach(alloc => {
       const p = (products || []).find(x => x.id === alloc.productId);
       if (!p) return;
       const v = p.vendor || p.provider || "Unknown";
@@ -11360,7 +11784,7 @@ function BudgetVsActual({
   }, [raffles]);
   const plannedByVendor = useMemo(() => {
     const m = {};
-    Object.values(allocs).forEach(cr => cr.forEach(alloc => {
+    Object.values(allocs).forEach(cr => cr.filter(r => r.active !== false).forEach(alloc => {
       const p = products.find(x => x.id === alloc.productId);
       if (!p) return;
       const v = p.vendor || p.provider || "Unknown";
@@ -11820,6 +12244,7 @@ function App() {
   const [raffles, setRaffles] = useState([]);
   const [raffleCountries, setRaffleCountries] = useState({});
   const [budgetExtras, setBudgetExtras] = useState([]);
+  const [extraCountries, setExtraCountries] = useState([]);
   const [allocateMode, setAllocateMode] = useState("mp");
   const [saveStatus, setSaveStatus] = useState("loading");
   const [loaded, setLoaded] = useState(false);
@@ -11898,6 +12323,7 @@ function App() {
       setRaffles(data.raffles || []);
       setRaffleCountries(data.raffleCountries || {});
       setBudgetExtras(data.budgetExtras || []);
+      setExtraCountries(data.extraCountries || []);
       if (data.appUsers) {
         setAppUsers(data.appUsers);
         localStorage.setItem("buff_appUsers", JSON.stringify(data.appUsers));
@@ -11912,6 +12338,7 @@ function App() {
       setRaffles([]);
       setRaffleCountries({});
       setBudgetExtras([]);
+      setExtraCountries([]);
       setSaveStatus("error");
       setLoaded(true);
     });
@@ -11934,11 +12361,12 @@ function App() {
           appUsers,
           raffles,
           raffleCountries,
-          budgetExtras
+          budgetExtras,
+          extraCountries
         })
       }).then(() => setSaveStatus("saved")).catch(() => setSaveStatus("error"));
     }, 1500);
-  }, [products, allocs, orders, transactions, appUsers, raffles, raffleCountries, budgetExtras]);
+  }, [products, allocs, orders, transactions, appUsers, raffles, raffleCountries, budgetExtras, extraCountries]);
 
   // Login screen
   if (!authed) return /*#__PURE__*/React.createElement("div", {
@@ -12347,7 +12775,7 @@ function App() {
     style: {
       color: "#f87171"
     }
-  }, "Save failed")), /*#__PURE__*/React.createElement("button", {
+  }, "Save failed")), isAdmin && /*#__PURE__*/React.createElement("button", {
     onClick: () => {
       const data = {
         products,
@@ -12401,17 +12829,21 @@ function App() {
     products: products,
     setProducts: setProducts,
     allocs: allocs,
+    setAllocs: setAllocs,
     setTab: setTab,
     raffles: raffles,
     setRaffles: setRaffles,
-    setAllocateMode: setAllocateMode
+    setAllocateMode: setAllocateMode,
+    extraCountries: extraCountries
   }), tab === "countries" && /*#__PURE__*/React.createElement(CountriesTab, {
     products: products,
     allocs: allocs,
     setAllocs: setAllocs,
     raffles: raffles,
     raffleCountries: raffleCountries,
-    setRaffleCountries: setRaffleCountries
+    setRaffleCountries: setRaffleCountries,
+    extraCountries: extraCountries,
+    setExtraCountries: setExtraCountries
   }), tab === "allocate" && /*#__PURE__*/React.createElement(AllocateTab, {
     products: products,
     allocs: allocs,
@@ -12421,7 +12853,8 @@ function App() {
     setRaffles: setRaffles,
     raffleCountries: raffleCountries,
     setRaffleCountries: setRaffleCountries,
-    defaultMode: allocateMode
+    defaultMode: allocateMode,
+    extraCountries: extraCountries
   }), tab === "budget" && /*#__PURE__*/React.createElement(BudgetTab, {
     products: products,
     allocs: allocs,
