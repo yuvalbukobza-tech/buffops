@@ -5971,19 +5971,25 @@ function CountryProductView({
 
   // Group Redash rows for this country by product_name
   const redashProducts = useMemo(() => {
+    const cAllocs = allocs[country] || [];
     const map = {};
     realRows.filter(r => (r.country || "").toUpperCase() === country).forEach(r => {
       const k = r.product_name || "Unknown";
-      if (!map[k]) map[k] = {
-        name: k,
-        units: 0,
-        spend: 0
-      };
+      if (!map[k]) map[k] = { name: k, units: 0, spend: 0 };
       map[k].units += Number(r.purchases) || 0;
-      map[k].spend += (Number(r.purchases) || 0) * priceFromName(k);
     });
-    return Object.values(map).sort((a, b) => b.spend - a.spend);
-  }, [realRows, country]);
+    return Object.values(map).map(item => {
+      const match = matchProduct(item.name, cAllocs, products);
+      let price;
+      if (match && !match.weak) {
+        const prod = products.find(p => p.id === match.alloc.productId);
+        price = prod ? calcPriceUSD(prod) : priceFromName(item.name);
+      } else {
+        price = priceFromName(item.name);
+      }
+      return { ...item, spend: item.units * price };
+    }).sort((a, b) => b.spend - a.spend);
+  }, [realRows, country, allocs, products]);
   const countryAllocs = allocs[country] || [];
 
   // Use score-based matching
@@ -6906,6 +6912,16 @@ function DashboardTab({
 }) {
   const days = Math.max(1, Math.round((new Date(dateTo) - new Date(dateFrom)) / 86400000) + 1);
   const [drillCountry, setDrillCountry] = useState(null);
+  // Returns USD price for a Redash row: uses matched product's calcPriceUSD, falls back to priceFromName
+  function rowPriceUSD(productName, country) {
+    const cAllocs = allocs[(country || "").toUpperCase()] || [];
+    const match = matchProduct(productName, cAllocs, products);
+    if (match && !match.weak) {
+      const prod = products.find(p => p.id === match.alloc.productId);
+      if (prod) return calcPriceUSD(prod);
+    }
+    return priceFromName(productName);
+  }
   async function fetchData() {
     setStatus("loading");
     setRealRows([]);
@@ -6943,7 +6959,7 @@ function DashboardTab({
     if (status === "done") {
       realRows.forEach(r => {
         const c = (r.country || "").toUpperCase();
-        const price = priceFromName(r.product_name);
+        const price = rowPriceUSD(r.product_name, r.country);
         if (!spendByCountry[c]) spendByCountry[c] = 0;
         spendByCountry[c] += (Number(r.purchases) || 0) * price;
       });
@@ -6961,20 +6977,20 @@ function DashboardTab({
         util
       };
     });
-  }, [plannedOnly, realRows, status]);
+  }, [plannedOnly, realRows, status, allocs, products]);
 
   // Top products by actual spend
   const topProducts = useMemo(() => {
     const map = {};
     realRows.forEach(r => {
       const k = r.product_name || "Unknown";
-      const price = priceFromName(r.product_name);
+      const price = rowPriceUSD(r.product_name, r.country);
       map[k] = (map[k] || 0) + (Number(r.purchases) || 0) * price;
     });
     return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 10);
-  }, [realRows]);
+  }, [realRows, allocs, products]);
   const totalPlanned = plannedOnly.reduce((s, r) => s + r.planned, 0);
-  const totalActual = realRows.reduce((s, r) => s + (Number(r.purchases) || 0) * priceFromName(r.product_name), 0);
+  const totalActual = realRows.reduce((s, r) => s + (Number(r.purchases) || 0) * rowPriceUSD(r.product_name, r.country), 0);
 
   // Planned vs actual by vendor (for visualization)
   const plannedByVendor = useMemo(() => {
@@ -6999,7 +7015,7 @@ function DashboardTab({
       const v = prod ? prod.vendor || prod.provider || "Unknown" : null;
       if (!v) return;
       if (!m[v]) m[v] = 0;
-      m[v] += (Number(r.purchases) || 0) * priceFromName(r.product_name);
+      m[v] += (Number(r.purchases) || 0) * calcPriceUSD(prod);
     });
     return m;
   }, [realRows, status, products, allocs]);
