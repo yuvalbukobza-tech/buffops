@@ -10271,10 +10271,13 @@ function FinanceRequests({
   function handleUpdate() {
     const id = parseInt(updateId);
     if (!id) return;
+    const now = new Date().toISOString();
     setTransactions(p => p.map(t => t.id === id ? {
       ...t,
       status: updateSt,
-      lastUpdate: new Date().toISOString()
+      lastUpdate: now,
+      statusChangedBy: displayName,
+      statusChangedAt: now
     } : t));
     setUpdateId("");
   }
@@ -11046,14 +11049,19 @@ function FinanceRequests({
     value: detailTx.status,
     onChange: e => {
       const ns = e.target.value;
+      const now = new Date().toISOString();
       setTransactions(p => p.map(t => t.id === detailTx.id ? {
         ...t,
         status: ns,
-        lastUpdate: new Date().toISOString()
+        lastUpdate: now,
+        statusChangedBy: displayName,
+        statusChangedAt: now
       } : t));
       setDetailTx(p => ({
         ...p,
-        status: ns
+        status: ns,
+        statusChangedBy: displayName,
+        statusChangedAt: now
       }));
       const currentUser = (appUsers || []).find(u => (u.firstName + " " + u.lastName).trim() === displayName || u.username === displayName);
       const senderEmail = currentUser?.email || "";
@@ -11093,7 +11101,9 @@ function FinanceRequests({
     value: "pending"
   }, "Pending"), /*#__PURE__*/React.createElement("option", {
     value: "delivered"
-  }, "Delivered")))), /*#__PURE__*/React.createElement("div", {
+  }, "Delivered")), detailTx.statusChangedAt && /*#__PURE__*/React.createElement("div", {
+    style: { marginTop: 8, fontSize: 10, color: "#555", lineHeight: 1.5 }
+  }, /*#__PURE__*/React.createElement("div", null, new Date(detailTx.statusChangedAt).toLocaleString()), detailTx.statusChangedBy && /*#__PURE__*/React.createElement("div", null, "by ", /*#__PURE__*/React.createElement("span", { style: { color: "#888", fontWeight: 700 } }, detailTx.statusChangedBy))))), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 20
     }
