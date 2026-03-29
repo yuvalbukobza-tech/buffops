@@ -11171,44 +11171,33 @@ function FinanceRequests({
       lineHeight: 1.6
     }
   }, detailTx.note)), (() => {
-    const subj = "Finance Request #" + detailTx.id + " — " + detailTx.vendor + " — " + detailTx.dateRequested;
+    const subj = "Finance Request #" + detailTx.id + " \u2014 " + detailTx.vendor + " \u2014 " + detailTx.dateRequested;
     const NL2 = String.fromCharCode(10);
     const deptLines = DEPTS.filter(d => detailTx[d] > 0).map(d => "  - " + DEPT_LABELS[d] + ": " + usd(detailTx[d])).join(NL2);
-    const body = ["Hi Finance Team,", "", "Finance Request #" + detailTx.id + " details:", "", "Vendor: " + detailTx.vendor, "Date: " + detailTx.dateRequested, "Total: " + usd(detailTx.totalAmount), "Status: " + detailTx.status, "", "Department Breakdown:", deptLines || "  (no split recorded)", ...(detailTx.note ? ["", "Notes: " + detailTx.note] : []), "", "Requested by: " + (detailTx.enteredBy || "—")].join(NL2);
-    const href = "mailto:?subject=" + encodeURIComponent(subj) + "&body=" + encodeURIComponent(body);
+    const body = ["Hi Finance Team,", "", "Finance Request #" + detailTx.id + " details:", "", "Vendor: " + detailTx.vendor, "Date: " + detailTx.dateRequested, "Total: " + usd(detailTx.totalAmount), "Status: " + detailTx.status, "", "Department Breakdown:", deptLines || "  (no split recorded)", ...(detailTx.note ? ["", "Notes: " + detailTx.note] : []), "", "Requested by: " + (detailTx.enteredBy || "\u2014")].join(NL2);
+    const toList = (appUsers || []).filter(u => u.defaultRecipient && u.email).map(u => u.email).join(",");
+    const currentUser = (appUsers || []).find(u => (u.firstName + " " + u.lastName).trim() === displayName || u.username === displayName);
+    const senderEmail = currentUser?.email || "";
+    function doSend() {
+      if (!toList) { setToast("\u26A0 No default recipients set in Admin."); setTimeout(() => setToast(""), 4000); return; }
+      const params = new URLSearchParams({ action: "sendEmail", to: toList, subject: subj, body, senderName: displayName || "", senderEmail });
+      fetch(SCRIPT_URL + "?" + params.toString(), { mode: "no-cors" })
+        .then(() => { setToast("\u2709 Email sent successfully!"); setTimeout(() => setToast(""), 4000); })
+        .catch(() => { setToast("\u26A0 Failed to send \u2014 check your connection."); setTimeout(() => setToast(""), 4000); });
+    }
     return /*#__PURE__*/React.createElement("div", {
+      style: { display: "flex", gap: 10, flexWrap: "wrap" }
+    }, /*#__PURE__*/React.createElement("button", {
+      onClick: doSend,
       style: {
-        display: "flex",
-        gap: 10,
-        flexWrap: "wrap"
-      }
-    }, /*#__PURE__*/React.createElement("a", {
-      href: href,
-      style: {
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 8,
-        background: G,
-        color: "#0a0a0a",
-        borderRadius: 8,
-        padding: "10px 20px",
-        fontSize: 13,
-        fontWeight: 800,
-        textDecoration: "none",
-        fontFamily: "inherit"
+        background: G, color: "#0a0a0a", border: "none", borderRadius: 8,
+        padding: "10px 20px", fontSize: 13, fontWeight: 800, cursor: "pointer", fontFamily: "inherit"
       }
     }, "\uD83D\uDCE7 Send Email"), /*#__PURE__*/React.createElement("button", {
       onClick: () => navigator.clipboard?.writeText(body).catch(() => {}),
       style: {
-        background: "#1a1a1a",
-        border: "1px solid #2a2a2a",
-        color: "#888",
-        borderRadius: 8,
-        padding: "10px 16px",
-        fontSize: 12,
-        cursor: "pointer",
-        fontFamily: "inherit",
-        fontWeight: 600
+        background: "#1a1a1a", border: "1px solid #2a2a2a", color: "#888",
+        borderRadius: 8, padding: "10px 16px", fontSize: 12, cursor: "pointer", fontFamily: "inherit", fontWeight: 600
       }
     }, "Copy Email Text"));
   })())), editTx && /*#__PURE__*/React.createElement("div", {
@@ -11616,14 +11605,18 @@ function FinanceRequests({
         senderName: displayName || "",
         senderEmail
       });
-      fetch(SCRIPT_URL + "?" + params.toString())
+      fetch(SCRIPT_URL + "?" + params.toString(), { mode: "no-cors" })
         .then(() => {
           setEmailPanel(false);
           setEmailStatus("idle");
           setToast("\u2709 Email sent successfully!");
           setTimeout(() => setToast(""), 4000);
         })
-        .catch(() => setEmailStatus("Failed to send — check your connection."));
+        .catch(() => {
+          setEmailStatus("idle");
+          setToast("\u26A0 Failed to send — check your connection.");
+          setTimeout(() => setToast(""), 4000);
+        });
     }
     return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
       style: {
