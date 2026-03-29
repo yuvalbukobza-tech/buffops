@@ -11606,20 +11606,24 @@ function FinanceRequests({
         return;
       }
       setEmailStatus("sending");
+      const currentUser = (appUsers || []).find(u => (u.firstName + " " + u.lastName).trim() === displayName || u.username === displayName);
+      const senderEmail = currentUser?.email || "";
       const params = new URLSearchParams({
         action: "sendEmail",
         to: toStr,
         subject: subj,
-        body
+        body,
+        senderName: displayName || "",
+        senderEmail
       });
-      fetch(SCRIPT_URL + "?" + params.toString()).then(r => r.json()).then(data => {
-        if (data.ok) {
+      fetch(SCRIPT_URL + "?" + params.toString())
+        .then(() => {
           setEmailPanel(false);
           setEmailStatus("idle");
-          setToast("Email sent successfully!");
-          setTimeout(() => setToast(""), 3000);
-        } else setEmailStatus(data.error || "error");
-      }).catch(err => setEmailStatus("error"));
+          setToast("\u2709 Email sent successfully!");
+          setTimeout(() => setToast(""), 4000);
+        })
+        .catch(() => setEmailStatus("Failed to send — check your connection."));
     }
     return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
       style: {
