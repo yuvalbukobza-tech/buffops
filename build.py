@@ -2630,15 +2630,17 @@ function DashboardTab({ products, allocs, dateFrom, setDateFrom, dateTo, setDate
   }, [plannedOnly, realRows, status]);
 
   // Top products by actual spend
-  const topProducts = useMemo(() => {
+  const allProductsSpend = useMemo(() => {
     const map = {};
     realRows.forEach(r => {
       const k = r.product_name || "Unknown";
       const price = priceFromName(r.product_name);
       map[k] = (map[k] || 0) + (Number(r.purchases) || 0) * price;
     });
-    return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    return Object.entries(map).sort((a, b) => b[1] - a[1]);
   }, [realRows]);
+  const topProducts = useMemo(() => allProductsSpend.slice(0, 10), [allProductsSpend]);
+  const [showAllProducts, setShowAllProducts] = useState(false);
 
   const totalPlanned = plannedOnly.reduce((s, r) => s + r.planned, 0);
   const totalActual  = realRows.reduce((s, r) => s + (Number(r.purchases)||0) * priceFromName(r.product_name), 0);
@@ -2853,7 +2855,15 @@ function DashboardTab({ products, allocs, dateFrom, setDateFrom, dateTo, setDate
         {/* Top products by actual spend */}
         {status==="done" && (
           <div style={{background:"#0d0d0d",border:"1px solid #1a1a1a",borderRadius:14,padding:"20px 24px"}}>
-            <div style={{fontSize:14,fontWeight:800,color:"#f1f5f9",marginBottom:4}}>Top Products</div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+              <div style={{fontSize:14,fontWeight:800,color:"#f1f5f9"}}>Top Products</div>
+              {allProductsSpend.length > 10 && (
+                <button onClick={()=>setShowAllProducts(true)}
+                  style={{background:"transparent",border:"1px solid #2a2a2a",borderRadius:6,color:"#888",fontSize:11,fontWeight:700,padding:"4px 10px",cursor:"pointer",fontFamily:"inherit",letterSpacing:"0.04em"}}>
+                  View All ({allProductsSpend.length})
+                </button>
+              )}
+            </div>
             <div style={{fontSize:11,color:"#444",marginBottom:20}}>By actual spend ($)</div>
             <div style={{display:"flex",flexDirection:"column",gap:12}}>
               {topProducts.length===0
@@ -2870,6 +2880,42 @@ function DashboardTab({ products, allocs, dateFrom, setDateFrom, dateTo, setDate
                   </div>
                 ))
               }
+            </div>
+          </div>
+        )}
+
+        {/* All Products modal */}
+        {showAllProducts && (
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center"}}
+            onClick={()=>setShowAllProducts(false)}>
+            <div style={{background:"#111",border:"1px solid #222",borderRadius:16,width:"min(680px,94vw)",maxHeight:"82vh",display:"flex",flexDirection:"column",overflow:"hidden"}}
+              onClick={e=>e.stopPropagation()}>
+              <div style={{padding:"20px 24px",borderBottom:"1px solid #1a1a1a",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+                <div>
+                  <div style={{fontSize:15,fontWeight:800,color:"#f1f5f9"}}>All Products — Actual Spend</div>
+                  <div style={{fontSize:11,color:"#444",marginTop:2}}>{allProductsSpend.length} products · {dateFrom} → {dateTo}</div>
+                </div>
+                <button onClick={()=>setShowAllProducts(false)}
+                  style={{background:"transparent",border:"none",color:"#555",fontSize:20,cursor:"pointer",lineHeight:1,padding:4}}>✕</button>
+              </div>
+              <div style={{overflowY:"auto",padding:"16px 24px",flex:1}}>
+                <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                  {allProductsSpend.map(([name,spend],i)=>(
+                    <div key={name} style={{display:"flex",alignItems:"center",gap:12}}>
+                      <span style={{fontSize:11,color:"#333",width:24,flexShrink:0,textAlign:"right"}}>{i+1}</span>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                          <span style={{fontSize:12,color:"#aaa",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:380}}>{name}</span>
+                          <span style={{fontSize:12,fontWeight:700,color:"#c8ff00",flexShrink:0,marginLeft:8}}>{fmtUsd(spend)}</span>
+                        </div>
+                        <div style={{height:4,background:"#1a1a1a",borderRadius:2,overflow:"hidden"}}>
+                          <div style={{width:`${(spend/allProductsSpend[0][1])*100}%`,height:"100%",background:"#c8ff00",borderRadius:2,opacity:i<10?1:0.55}}/>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         )}
