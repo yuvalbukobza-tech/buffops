@@ -12376,6 +12376,7 @@ function BudgetTab({
 // ── APP ───────────────────────────────────────────────────────────────────────
 
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwwvjZHPkTUIkTrRvdA6TRfxspBKppKa5wm-AsvPnlZ7__EOJiIxPsTxDDXXqtzVSsy/exec";
+const WRITE_TOKEN = "buffops-secret-2026";
 function App() {
   const USERS = [{
     user: "yuvalbukobza",
@@ -12494,17 +12495,13 @@ function App() {
       }
       setSaveStatus("saved");
       setLoaded(true);
+      // Keep a local safety copy so data survives a Sheets fetch failure
+      try {
+        localStorage.setItem("buff_safetyBackup", JSON.stringify({ products: data.products || [], allocs: data.allocs || {}, orders: data.orders || [], transactions: data.transactions || [], raffles: data.raffles || [], raffleCountries: data.raffleCountries || {}, budgetExtras: data.budgetExtras || [], extraCountries: data.extraCountries || [], savedAt: new Date().toISOString() }));
+      } catch(e) {}
     }).catch(() => {
-      setProducts([]);
-      setAllocs({});
-      setOrders([]);
-      setTransactions([]);
-      setRaffles([]);
-      setRaffleCountries({});
-      setBudgetExtras([]);
-      setExtraCountries([]);
       setSaveStatus("error");
-      setLoaded(true);
+      // Do NOT set loaded=true here — prevents auto-save from wiping Sheets with empty data
     });
   }, [authed]);
 
@@ -12518,6 +12515,7 @@ function App() {
         method: "POST",
         mode: "no-cors",
         body: JSON.stringify({
+          token: WRITE_TOKEN,
           products,
           allocs,
           orders,
@@ -12701,7 +12699,7 @@ function App() {
       letterSpacing: "0.08em",
       textTransform: "uppercase"
     }
-  }, "Loading data from Google Sheets..."));
+  }, saveStatus === "error" ? /*#__PURE__*/React.createElement("span", { style: { color: "#ef4444" } }, "Failed to load data from Google Sheets. Refresh to try again.") : "Loading data from Google Sheets..."));
   const TABS = [{
     id: "dashboard",
     label: "Dashboard",
