@@ -5957,6 +5957,7 @@ const REDASH_URL = "https://redash.app.buff.game";
 const REDASH_KEY = "01qFvUfEP15v9DPFCPAcl8Fc9mWeWcPKtaN13ZxZ";
 const REDASH_QID = 2672;
 const PROXY_URL = "https://script.google.com/macros/s/AKfycbyDJ6nUT5l3Y7R95oi--vp9QM-VZ1urwB64-pMbCPdgyVArgDzQTOiMFvz-ZpWDXADy/exec";
+const APP_KEY = "bk_01b77045cc321117d6d783a4ce81c3d7"; // shared secret sent with every backend call
 function AnalyticsTab({
   products,
   allocs,
@@ -5992,7 +5993,7 @@ function AnalyticsTab({
     setRealRows([]);
     setErrorMsg("");
     try {
-      const r = await fetch(`${PROXY_URL}?action=redash&from=${dateFrom}&to=${dateTo}`);
+      const r = await fetch(`${PROXY_URL}?action=redash&from=${dateFrom}&to=${dateTo}&key=${APP_KEY}`);
       const d = await r.json();
       if (d.error) throw new Error(d.error);
       setRealRows(d.rows || []);
@@ -6486,7 +6487,7 @@ function DashboardTab({
     setRealRows([]);
     setErrorMsg("");
     try {
-      const r = await fetch(`${PROXY_URL}?action=redash&from=${dateFrom}&to=${dateTo}`);
+      const r = await fetch(`${PROXY_URL}?action=redash&from=${dateFrom}&to=${dateTo}&key=${APP_KEY}`);
       const d = await r.json();
       if (d.error) throw new Error(d.error);
       setRealRows(d.rows || []);
@@ -7698,12 +7699,12 @@ function AdminTab({
   };
   function syncToCloud() {
     setSyncStatus("saving");
-    fetch(SCRIPT_URL + "?action=getAll").then(r => r.json()).then(data => {
+    fetch(SCRIPT_URL + "?action=getAll&key=" + APP_KEY).then(r => r.json()).then(data => {
       const merged = {
         ...data,
         appUsers
       };
-      return fetch(SCRIPT_URL, {
+      return fetch(SCRIPT_URL + "?key=" + APP_KEY, {
         method: "POST",
         mode: "no-cors",
         body: JSON.stringify(merged)
@@ -10669,6 +10670,7 @@ function FinanceRequests({
         const ssubj = "Status Update: Finance Request #" + detailTx.id + " - " + detailTx.vendor + " - " + ns.charAt(0).toUpperCase() + ns.slice(1);
         const sparams = new URLSearchParams({
           action: "sendEmail",
+          key: APP_KEY,
           to: toList,
           subject: ssubj,
           body: sbody,
@@ -11223,6 +11225,7 @@ function FinanceRequests({
       setEmailStatus("sending");
       const params = new URLSearchParams({
         action: "sendEmail",
+        key: APP_KEY,
         to: toStr,
         subject: subj,
         body
@@ -11497,7 +11500,7 @@ function BudgetVsActual({
     setVsActualRows([]);
     setErrMsg("");
     try {
-      const r = await fetch(`${PROXY_URL}?action=redash&from=${vsActualFrom}&to=${vsActualTo}`);
+      const r = await fetch(`${PROXY_URL}?action=redash&from=${vsActualFrom}&to=${vsActualTo}&key=${APP_KEY}`);
       const d = await r.json();
       if (d.error) throw new Error(d.error);
       setVsActualRows(d.rows || []);
@@ -11975,7 +11978,7 @@ function FulfillmentTab() {
 
   const api = (action, params) => {
     const qs = Object.keys(params || {}).map(k => k + "=" + encodeURIComponent(params[k] == null ? "" : params[k])).join("&");
-    return fetch(SCRIPT_URL + "?action=" + action + (qs ? "&" + qs : "")).then(r => r.json());
+    return fetch(SCRIPT_URL + "?action=" + action + (qs ? "&" + qs : "") + "&key=" + APP_KEY).then(r => r.json());
   };
   const load = () => {
     setStatus("loading");
@@ -12157,7 +12160,7 @@ function App() {
 
   // Pre-auth: silently load appUsers from Sheets in background
   useEffect(() => {
-    fetch(SCRIPT_URL).then(r => r.json()).then(data => {
+    fetch(SCRIPT_URL + "?key=" + APP_KEY).then(r => r.json()).then(data => {
       if (data.appUsers && data.appUsers.length > 0) {
         setAppUsers(data.appUsers);
         localStorage.setItem("buff_appUsers", JSON.stringify(data.appUsers));
@@ -12192,7 +12195,7 @@ function App() {
   // Load from Google Sheets on mount (only when authed)
   useEffect(() => {
     if (!authed) return;
-    fetch(SCRIPT_URL).then(r => r.json()).then(data => {
+    fetch(SCRIPT_URL + "?key=" + APP_KEY).then(r => r.json()).then(data => {
       setProducts(data.products || []);
       setAllocs(data.allocs || {});
       setOrders(data.orders || []);
@@ -12225,7 +12228,7 @@ function App() {
     setSaveStatus("saving");
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      fetch(SCRIPT_URL, {
+      fetch(SCRIPT_URL + "?key=" + APP_KEY, {
         method: "POST",
         mode: "no-cors",
         body: JSON.stringify({
