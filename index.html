@@ -11986,12 +11986,25 @@ function FulfillmentTab() {
   };
   useEffect(() => { load(); }, []);
 
+  // Fast refresh after an action: re-read only the Fulfillment sheet (skips the slow Redash pull)
+  const refreshStatuses = () => {
+    api("fulfillList", {}).then(d => {
+      const saved = {};
+      (d.rows || []).forEach(r => { saved[r.key] = r; });
+      setRows(prev => prev.map(r => {
+        const s = saved[r.key];
+        if (!s) return r;
+        return { ...r, status: s.status, token: s.token, fullName: s.fullName, address: s.address, apt: s.apt, city: s.city, state: s.state, zip: s.zip, country: s.country || r.country, phone: s.phone, orderNumber: s.orderNumber };
+      }));
+    }).catch(function () {});
+  };
+
   const act = (key, action, params) => {
     setBusyKey(key);
     api(action, params).then(d => {
       setBusyKey("");
       if (d && d.error) { window.alert("Error: " + d.error); return; }
-      load();
+      refreshStatuses();
     }).catch(e => { setBusyKey(""); window.alert("Error: " + e); });
   };
 
