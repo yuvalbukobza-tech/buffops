@@ -688,6 +688,31 @@ const Icon = {
     r: "4"
   }), /*#__PURE__*/React.createElement("path", {
     d: "M4 20c0-4 3.6-7 8-7s8 3 8 7"
+  })),
+  fulfillment: () => /*#__PURE__*/React.createElement("svg", {
+    width: "15",
+    height: "15",
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: "2",
+    strokeLinecap: "round",
+    strokeLinejoin: "round"
+  }, /*#__PURE__*/React.createElement("rect", {
+    x: "1",
+    y: "3",
+    width: "15",
+    height: "13"
+  }), /*#__PURE__*/React.createElement("polygon", {
+    points: "16 8 20 8 23 11 23 16 16 16 16 8"
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: "5.5",
+    cy: "18.5",
+    r: "2.5"
+  }), /*#__PURE__*/React.createElement("circle", {
+    cx: "18.5",
+    cy: "18.5",
+    r: "2.5"
   }))
 };
 
@@ -5931,7 +5956,7 @@ function CountryProductView({
 const REDASH_URL = "https://redash.app.buff.game";
 const REDASH_KEY = "01qFvUfEP15v9DPFCPAcl8Fc9mWeWcPKtaN13ZxZ";
 const REDASH_QID = 2672;
-const PROXY_URL = "https://script.google.com/macros/s/AKfycbwwvjZHPkTUIkTrRvdA6TRfxspBKppKa5wm-AsvPnlZ7__EOJiIxPsTxDDXXqtzVSsy/exec";
+const PROXY_URL = "https://script.google.com/macros/s/AKfycbyDJ6nUT5l3Y7R95oi--vp9QM-VZ1urwB64-pMbCPdgyVArgDzQTOiMFvz-ZpWDXADy/exec";
 function AnalyticsTab({
   products,
   allocs,
@@ -11932,7 +11957,136 @@ function BudgetTab({
 
 // ── APP ───────────────────────────────────────────────────────────────────────
 
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwwvjZHPkTUIkTrRvdA6TRfxspBKppKa5wm-AsvPnlZ7__EOJiIxPsTxDDXXqtzVSsy/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyDJ6nUT5l3Y7R95oi--vp9QM-VZ1urwB64-pMbCPdgyVArgDzQTOiMFvz-ZpWDXADy/exec";
+
+// ── AMAZON FULFILLMENT TAB (admin only) ───────────────────────────────────────
+// Owed list comes from the backend "fulfillPull" action (Redash + saved status).
+// Data is stored server-side in a SEPARATE "Fulfillment" sheet, never in "Data".
+function FulfillmentTab() {
+  const h = React.createElement;
+  const [rows, setRows] = useState([]);
+  const [status, setStatus] = useState("loading");
+  const [err, setErr] = useState("");
+  const [busyKey, setBusyKey] = useState("");
+  const [modalRow, setModalRow] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const [orderModal, setOrderModal] = useState(null);
+  const [orderNum, setOrderNum] = useState("");
+
+  const api = (action, params) => {
+    const qs = Object.keys(params || {}).map(k => k + "=" + encodeURIComponent(params[k] == null ? "" : params[k])).join("&");
+    return fetch(SCRIPT_URL + "?action=" + action + (qs ? "&" + qs : "")).then(r => r.json());
+  };
+  const load = () => {
+    setStatus("loading");
+    api("fulfillPull", {}).then(d => {
+      if (d.error) { setErr(d.error); setStatus("error"); }
+      else { setRows(d.rows || []); setErr(""); setStatus("idle"); }
+    }).catch(e => { setErr(String(e)); setStatus("error"); });
+  };
+  useEffect(() => { load(); }, []);
+
+  const act = (key, action, params) => {
+    setBusyKey(key);
+    api(action, params).then(d => {
+      setBusyKey("");
+      if (d && d.error) { window.alert("Error: " + d.error); return; }
+      load();
+    }).catch(e => { setBusyKey(""); window.alert("Error: " + e); });
+  };
+
+  const META = {
+    pending:          { label: "Pending",    variant: "default" },
+    emailed:          { label: "Emailed",    variant: "regular" },
+    details_received: { label: "Details in", variant: "gcow" },
+    ordered:          { label: "Ordered",    variant: "premium" },
+    done:             { label: "Done",       variant: "gaming" }
+  };
+  const ORDER = ["pending", "emailed", "details_received", "ordered", "done"];
+  const counts = ORDER.reduce((a, s) => { a[s] = rows.filter(r => r.status === s).length; return a; }, {});
+
+  const copyText = (text) => {
+    navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); });
+  };
+  const copyCard = (r) => copyText(
+    "Full name: " + (r.fullName || r.name) + "\n" +
+    "Address: " + [r.address, r.apt].filter(Boolean).join(", ") + "\n" +
+    "City / State / Zip: " + [r.city, r.state, r.zip].filter(Boolean).join(", ") + "\n" +
+    "Country: " + (r.country || "") + "\n" +
+    "Phone: " + (r.phone || "") + "\n" +
+    "Product: " + (r.product || ""));
+  const copyLink = (r) => copyText(SCRIPT_URL + "?action=fulfillForm&token=" + encodeURIComponent(r.token));
+
+  const TH = (s) => h("th", { style: { textAlign: "left", padding: "10px 14px", fontSize: 10, fontWeight: 700, color: "#444", letterSpacing: "0.06em", textTransform: "uppercase", borderBottom: "1px solid #1a1a1a", whiteSpace: "nowrap" } }, s);
+  const td = { padding: "12px 14px", fontSize: 13, color: "#e2e8f0", borderBottom: "1px solid #141414", verticalAlign: "middle" };
+  const cardLine = (label, val) => h("div", { style: { display: "flex", padding: "8px 0", borderBottom: "1px solid #141414" } },
+    h("div", { style: { width: 160, color: "#555", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" } }, label),
+    h("div", { style: { flex: 1, color: "#f1f5f9", fontSize: 14 } }, val || "—"));
+
+  const actionCell = (r) => {
+    const busy = busyKey === r.key;
+    if (r.status === "pending")
+      return h(Btn, { small: true, disabled: busy, onClick: () => act(r.key, "fulfillEmail1", { key: r.key, userId: r.userId, name: r.name, email: r.email, product: r.product, country: r.country, purchaseDate: r.purchaseDate }) }, busy ? "Sending…" : "Send email #1");
+    if (r.status === "emailed")
+      return h("div", { style: { display: "flex", gap: 8, alignItems: "center" } },
+        h("span", { style: { fontSize: 12, color: "#666" } }, "Waiting for customer"),
+        h(Btn, { small: true, variant: "ghost", onClick: () => copyLink(r) }, "Copy link"),
+        h(Btn, { small: true, variant: "ghost", disabled: busy, onClick: () => act(r.key, "fulfillEmail1", { key: r.key, userId: r.userId, name: r.name, email: r.email, product: r.product, country: r.country, purchaseDate: r.purchaseDate }) }, "Resend"));
+    if (r.status === "details_received")
+      return h("div", { style: { display: "flex", gap: 8 } },
+        h(Btn, { small: true, onClick: () => setModalRow(r) }, "Order card"),
+        h(Btn, { small: true, variant: "success", onClick: () => { setOrderNum(""); setOrderModal(r); } }, "Mark ordered"));
+    if (r.status === "ordered")
+      return h("div", { style: { display: "flex", gap: 8, alignItems: "center" } },
+        r.orderNumber ? h("span", { style: { fontSize: 11, color: "#666" } }, "#" + r.orderNumber) : null,
+        h(Btn, { small: true, disabled: busy, onClick: () => act(r.key, "fulfillEmail2", { token: r.token }) }, busy ? "Sending…" : "Send confirmation"),
+        h(Btn, { small: true, variant: "success", disabled: busy, onClick: () => act(r.key, "fulfillSetStatus", { token: r.token, status: "done" }) }, "Mark done"));
+    return h("span", { style: { fontSize: 12, color: "#4ade80", fontWeight: 700 } }, "✔ Done");
+  };
+
+  return h("div", null,
+    h("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 } },
+      h("div", null,
+        h("div", { style: { fontSize: 22, fontWeight: 900, letterSpacing: "-0.03em" } }, "Amazon Fulfillment"),
+        h("div", { style: { fontSize: 12, color: "#555", marginTop: 4 } }, "Send owed Amazon products to customers")),
+      h(Btn, { variant: "ghost", small: true, onClick: load }, "Refresh")),
+    h("div", { style: { display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 14, marginBottom: 24 } },
+      ORDER.map(s => h(StatCard, { key: s, label: META[s].label, value: counts[s] || 0, color: s === "done" ? "#4ade80" : G }))),
+    status === "loading" ? h("div", { style: { color: "#555", padding: 40, textAlign: "center" } }, "Loading queue…") :
+    status === "error" ? h("div", { style: { color: "#f87171", padding: 40, textAlign: "center" } }, "Error: " + err) :
+    rows.length === 0 ? h("div", { style: { color: "#555", padding: 40, textAlign: "center" } }, "No one is currently owed an Amazon product.") :
+    h("div", { style: { background: "#0d0d0d", border: "1px solid #1a1a1a", borderRadius: 14, overflow: "hidden" } },
+      h("table", { style: { width: "100%", borderCollapse: "collapse" } },
+        h("thead", null, h("tr", null, TH("Customer"), TH("Email"), TH("Product"), TH("Status"), TH("Next step"))),
+        h("tbody", null, rows.map((r, i) => h("tr", { key: r.key || i },
+          h("td", { style: td }, r.name || r.fullName || "—"),
+          h("td", { style: { ...td, color: "#888" } }, r.email),
+          h("td", { style: td }, r.product),
+          h("td", { style: td }, h(Badge, { variant: META[r.status] ? META[r.status].variant : "default" }, META[r.status] ? META[r.status].label : r.status)),
+          h("td", { style: td }, actionCell(r)))))
+      )),
+    copied && h("div", { style: { position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", background: G, color: "#0a0a0a", padding: "10px 20px", borderRadius: 8, fontWeight: 800, fontSize: 13, zIndex: 2000 } }, "Copied ✓"),
+    modalRow && h(Modal, { title: "Order card — " + (modalRow.fullName || modalRow.name), onClose: () => setModalRow(null) },
+      h("div", null,
+        cardLine("Product", modalRow.product),
+        cardLine("Full name", modalRow.fullName || modalRow.name),
+        cardLine("Address", [modalRow.address, modalRow.apt].filter(Boolean).join(", ")),
+        cardLine("City / State / Zip", [modalRow.city, modalRow.state, modalRow.zip].filter(Boolean).join(", ")),
+        cardLine("Country", modalRow.country),
+        cardLine("Phone", modalRow.phone)),
+      h("div", { style: { display: "flex", gap: 10, marginTop: 20 } },
+        h(Btn, { onClick: () => copyCard(modalRow) }, "Copy for Claude"),
+        h(Btn, { variant: "ghost", onClick: () => setModalRow(null) }, "Close")),
+      h("div", { style: { marginTop: 14, fontSize: 11, color: "#555", lineHeight: 1.6 } }, "Paste into Claude in Chrome to place the Amazon order. The final “Place your order” click stays with you.")),
+    orderModal && h(Modal, { title: "Confirm Amazon order — " + (orderModal.fullName || orderModal.name), onClose: () => setOrderModal(null) },
+      h("div", { style: { fontSize: 13, color: "#888", marginBottom: 16, lineHeight: 1.6 } }, "Enter the Amazon order number from the confirmation. It's saved and included in the confirmation email to the customer."),
+      h(Field, { label: "Amazon order number" }, h(Input, { value: orderNum, onChange: e => setOrderNum(e.target.value), placeholder: "e.g. 114-4934714-3860242" })),
+      h("div", { style: { display: "flex", gap: 10, marginTop: 20 } },
+        h(Btn, { disabled: !orderNum.trim(), onClick: () => { act(orderModal.key, "fulfillSetStatus", { token: orderModal.token, status: "ordered", orderNumber: orderNum.trim() }); setOrderModal(null); } }, "Confirm order"),
+        h(Btn, { variant: "ghost", onClick: () => setOrderModal(null) }, "Cancel")))
+  );
+}
+
 function App() {
   const USERS = [{
     user: "yuvalbukobza",
@@ -12266,6 +12420,10 @@ function App() {
     label: "Allocate",
     Icon: Icon.allocate
   }, ...(isAdmin ? [{
+    id: "fulfillment",
+    label: "Fulfillment",
+    Icon: Icon.fulfillment
+  }, {
     id: "admin",
     label: "Admin",
     Icon: Icon.admin
@@ -12586,7 +12744,7 @@ function App() {
   }), tab === "admin" && isAdmin && /*#__PURE__*/React.createElement(AdminTab, {
     appUsers: appUsers,
     setAppUsers: setAppUsers
-  })));
+  }), tab === "fulfillment" && isAdmin && /*#__PURE__*/React.createElement(FulfillmentTab, null)));
 }
 
     ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
