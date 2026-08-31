@@ -12042,12 +12042,12 @@ function FulfillmentTab() {
   const actionCell = (r) => {
     const busy = busyKey === r.key;
     if (r.status === "pending")
-      return h(Btn, { small: true, disabled: busy, onClick: () => act(r.key, "fulfillEmail1", { key: r.key, userId: r.userId, name: r.name, email: r.email, product: r.product, country: r.country, purchaseDate: r.purchaseDate }) }, busy ? "Sending…" : "Send email #1");
+      return h(Btn, { small: true, disabled: busy, onClick: () => act(r.key, "fulfillEmail1", { rowkey: r.key, userId: r.userId, name: r.name, email: r.email, product: r.product, country: r.country, purchaseDate: r.purchaseDate }) }, busy ? "Sending…" : "Send email #1");
     if (r.status === "emailed")
       return h("div", { style: { display: "flex", gap: 8, alignItems: "center" } },
         h("span", { style: { fontSize: 12, color: "#666" } }, "Waiting for customer"),
         h(Btn, { small: true, variant: "ghost", onClick: () => copyLink(r) }, "Copy link"),
-        h(Btn, { small: true, variant: "ghost", disabled: busy, onClick: () => act(r.key, "fulfillEmail1", { key: r.key, userId: r.userId, name: r.name, email: r.email, product: r.product, country: r.country, purchaseDate: r.purchaseDate }) }, "Resend"));
+        h(Btn, { small: true, variant: "ghost", disabled: busy, onClick: () => act(r.key, "fulfillEmail1", { rowkey: r.key, userId: r.userId, name: r.name, email: r.email, product: r.product, country: r.country, purchaseDate: r.purchaseDate }) }, "Resend"));
     if (r.status === "details_received")
       return h("div", { style: { display: "flex", gap: 8 } },
         h(Btn, { small: true, onClick: () => setModalRow(r) }, "Order card"),
