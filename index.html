@@ -11972,9 +11972,11 @@ function FulfillmentTab() {
   const [err, setErr] = useState("");
   const [busyKey, setBusyKey] = useState("");
   const [modalRow, setModalRow] = useState(null);
+  const [detailRow, setDetailRow] = useState(null);
   const [copied, setCopied] = useState(false);
   const [orderModal, setOrderModal] = useState(null);
   const [orderNum, setOrderNum] = useState("");
+  const [group, setGroup] = useState("new");
 
   const api = (action, params) => {
     const qs = Object.keys(params || {}).map(k => k + "=" + encodeURIComponent(params[k] == null ? "" : params[k])).join("&");
@@ -11994,11 +11996,7 @@ function FulfillmentTab() {
     api("fulfillList", {}).then(d => {
       const saved = {};
       (d.rows || []).forEach(r => { saved[r.key] = r; });
-      setRows(prev => prev.map(r => {
-        const s = saved[r.key];
-        if (!s) return r;
-        return { ...r, status: s.status, token: s.token, fullName: s.fullName, address: s.address, apt: s.apt, city: s.city, state: s.state, zip: s.zip, country: s.country || r.country, phone: s.phone, orderNumber: s.orderNumber };
-      }));
+      setRows(prev => prev.map(r => saved[r.key] ? { ...r, ...saved[r.key] } : r));
     }).catch(function () {});
   };
 
@@ -12018,8 +12016,17 @@ function FulfillmentTab() {
     ordered:          { label: "Ordered",    variant: "premium" },
     done:             { label: "Done",       variant: "gaming" }
   };
-  const ORDER = ["pending", "emailed", "details_received", "ordered", "done"];
-  const counts = ORDER.reduce((a, s) => { a[s] = rows.filter(r => r.status === s).length; return a; }, {});
+  const GROUPS = {
+    new:      { label: "New",         statuses: ["pending"], color: G },
+    progress: { label: "In progress", statuses: ["emailed", "details_received", "ordered"], color: "#fb923c" },
+    done:     { label: "Done",        statuses: ["done"], color: "#4ade80" }
+  };
+  const GKEYS = ["new", "progress", "done"];
+  const groupCounts = {};
+  GKEYS.forEach(g => { groupCounts[g] = rows.filter(r => GROUPS[g].statuses.indexOf(r.status) !== -1).length; });
+  const visible = rows.filter(r => GROUPS[group].statuses.indexOf(r.status) !== -1);
+
+  const fmtTs = (iso) => { if (!iso) return "—"; const d = new Date(iso); return isNaN(d.getTime()) ? String(iso) : d.toLocaleString(); };
 
   const copyText = (text) => {
     navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); });
@@ -12066,16 +12073,25 @@ function FulfillmentTab() {
         h("div", { style: { fontSize: 22, fontWeight: 900, letterSpacing: "-0.03em" } }, "Amazon Fulfillment"),
         h("div", { style: { fontSize: 12, color: "#555", marginTop: 4 } }, "Send owed Amazon products to customers")),
       h(Btn, { variant: "ghost", small: true, onClick: load }, "Refresh")),
-    h("div", { style: { display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 14, marginBottom: 24 } },
-      ORDER.map(s => h(StatCard, { key: s, label: META[s].label, value: counts[s] || 0, color: s === "done" ? "#4ade80" : G }))),
+    h("div", { style: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14, marginBottom: 24 } },
+      GKEYS.map(g => h("div", {
+        key: g, onClick: () => setGroup(g),
+        style: {
+          background: group === g ? "rgba(200,255,0,0.06)" : "#0d0d0d",
+          border: "1px solid " + (group === g ? "rgba(200,255,0,0.35)" : "#1a1a1a"),
+          borderRadius: 14, padding: "18px 22px", cursor: "pointer", transition: "all .15s"
+        }
+      },
+        h("div", { style: { fontSize: 10, color: group === g ? "#e2e8f0" : "#555", fontWeight: 700, marginBottom: 8, letterSpacing: "0.07em", textTransform: "uppercase" } }, GROUPS[g].label),
+        h("div", { style: { fontSize: 28, fontWeight: 900, color: GROUPS[g].color, letterSpacing: "-0.04em", lineHeight: 1 } }, groupCounts[g] || 0)))),
     status === "loading" ? h("div", { style: { color: "#555", padding: 40, textAlign: "center" } }, "Loading queue…") :
     status === "error" ? h("div", { style: { color: "#f87171", padding: 40, textAlign: "center" } }, "Error: " + err) :
-    rows.length === 0 ? h("div", { style: { color: "#555", padding: 40, textAlign: "center" } }, "No one is currently owed an Amazon product.") :
+    visible.length === 0 ? h("div", { style: { color: "#555", padding: 40, textAlign: "center" } }, "No customers in “" + GROUPS[group].label + "”.") :
     h("div", { style: { background: "#0d0d0d", border: "1px solid #1a1a1a", borderRadius: 14, overflow: "hidden" } },
       h("table", { style: { width: "100%", borderCollapse: "collapse" } },
         h("thead", null, h("tr", null, TH("Customer"), TH("Email"), TH("Product"), TH("Status"), TH("Next step"))),
-        h("tbody", null, rows.map((r, i) => h("tr", { key: r.key || i },
-          h("td", { style: td }, r.name || r.fullName || "—"),
+        h("tbody", null, visible.map((r, i) => h("tr", { key: r.key || i },
+          h("td", { style: { ...td, cursor: "pointer", color: G, fontWeight: 700 }, title: "View full details", onClick: () => setDetailRow(r) }, r.name || r.fullName || "—"),
           h("td", { style: { ...td, color: "#888" } }, r.email),
           h("td", { style: td }, r.product),
           h("td", { style: td }, h(Badge, { variant: META[r.status] ? META[r.status].variant : "default" }, META[r.status] ? META[r.status].label : r.status)),
@@ -12099,7 +12115,28 @@ function FulfillmentTab() {
       h(Field, { label: "Amazon order number" }, h(Input, { value: orderNum, onChange: e => setOrderNum(e.target.value), placeholder: "e.g. 114-4934714-3860242" })),
       h("div", { style: { display: "flex", gap: 10, marginTop: 20 } },
         h(Btn, { disabled: !orderNum.trim(), onClick: () => { act(orderModal.key, "fulfillSetStatus", { token: orderModal.token, status: "ordered", orderNumber: orderNum.trim() }); setOrderModal(null); } }, "Confirm order"),
-        h(Btn, { variant: "ghost", onClick: () => setOrderModal(null) }, "Cancel")))
+        h(Btn, { variant: "ghost", onClick: () => setOrderModal(null) }, "Cancel"))),
+    detailRow && h(Modal, { title: "Customer — " + (detailRow.name || detailRow.fullName || detailRow.email || "—"), onClose: () => setDetailRow(null) },
+      h("div", { style: { display: "flex", gap: 10, alignItems: "center", marginBottom: 4, flexWrap: "wrap" } },
+        h(Badge, { variant: META[detailRow.status] ? META[detailRow.status].variant : "default" }, META[detailRow.status] ? META[detailRow.status].label : detailRow.status),
+        h("span", { style: { color: "#e2e8f0", fontSize: 14, fontWeight: 700 } }, detailRow.product),
+        detailRow.amount ? h("span", { style: { color: "#555", fontSize: 13 } }, "· " + detailRow.amount + " Buffs") : null),
+      h("div", { style: { fontSize: 10, color: "#555", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", margin: "20px 0 6px" } }, "Timeline"),
+      cardLine("Purchased", fmtTs(detailRow.purchaseDate)),
+      cardLine("Email #1 sent", fmtTs(detailRow.emailedAt)),
+      cardLine("Details received", fmtTs(detailRow.detailsAt)),
+      cardLine("Ordered", fmtTs(detailRow.orderedAt) + (detailRow.orderNumber ? "   (order #" + detailRow.orderNumber + ")" : "")),
+      cardLine("Completed", fmtTs(detailRow.doneAt)),
+      h("div", { style: { fontSize: 10, color: "#555", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", margin: "20px 0 6px" } }, "Shipping details"),
+      cardLine("Full name", detailRow.fullName || detailRow.name),
+      cardLine("Address", [detailRow.address, detailRow.apt].filter(Boolean).join(", ")),
+      cardLine("City / State / ZIP", [detailRow.city, detailRow.state, detailRow.zip].filter(Boolean).join(", ")),
+      cardLine("Country", detailRow.country),
+      cardLine("Phone", detailRow.phone),
+      cardLine("Email", detailRow.email),
+      h("div", { style: { display: "flex", gap: 10, marginTop: 20 } },
+        (detailRow.fullName || detailRow.address) ? h(Btn, { onClick: () => copyCard(detailRow) }, "Copy for Claude") : null,
+        h(Btn, { variant: "ghost", onClick: () => setDetailRow(null) }, "Close")))
   );
 }
 
