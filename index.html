@@ -8165,7 +8165,7 @@ function AdminTab({
 }
 
 // ── BUDGET CONSTANTS ────────────────────────────────────────────────────────────
-const VENDORS = ["GCOW", "Loot Keys", "Kinguin", "Riot Internal", "Internal", "Data project", "Other"];
+const VENDORS = ["GCOW", "Loot Keys", "Kinguin", "Riot Internal", "Internal", "Other"];
 const PURPOSES = ["MP", "Raffles", "Buff Pass"];
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -9747,12 +9747,13 @@ function FinanceRequests({
   isAdmin
 }) {
   const today = new Date().toISOString().slice(0, 10);
-  const DEPTS = ["productDesktop", "productMobile", "marketing", "buffPay"];
+  const DEPTS = ["productDesktop", "productMobile", "marketing", "buffPay", "dataProject"];
   const DEPT_LABELS = {
     productDesktop: "Product Desktop",
     productMobile: "Product Mobile",
     marketing: "Marketing",
-    buffPay: "Buff Pay"
+    buffPay: "Buff Pay",
+    dataProject: "Data project"
   };
   const nextId = useMemo(() => transactions.length > 0 ? Math.max(...transactions.map(t => Number(t.id) || 0)) + 1 : 1, [transactions]);
   const BLANK_TX = {
@@ -9763,7 +9764,8 @@ function FinanceRequests({
     productDesktop: "",
     productMobile: "",
     marketing: "",
-    buffPay: ""
+    buffPay: "",
+    dataProject: ""
   };
   const [f, setF] = useState(BLANK_TX);
   const [emailPanel, setEmailPanel] = useState(false);
@@ -9787,7 +9789,8 @@ function FinanceRequests({
     productDesktop: true,
     productMobile: false,
     marketing: false,
-    buffPay: false
+    buffPay: false,
+    dataProject: false
   });
   const [success, setSuccess] = useState(false);
   const [filterV, setFilterV] = useState("All");
@@ -9805,7 +9808,8 @@ function FinanceRequests({
     productDesktop: G,
     productMobile: "#38bdf8",
     marketing: "#fb923c",
-    buffPay: "#a78bfa"
+    buffPay: "#a78bfa",
+    dataProject: "#f472b6"
   };
   const totalAmount = useMemo(() => DEPTS.filter(d => active[d]).reduce((s, d) => s + (parseFloat(f[d]) || 0), 0), [f, active]);
   const monthlyData = useMemo(() => {
@@ -9844,6 +9848,7 @@ function FinanceRequests({
       productMobile: active.productMobile ? parseFloat(f.productMobile) || 0 : 0,
       marketing: active.marketing ? parseFloat(f.marketing) || 0 : 0,
       buffPay: active.buffPay ? parseFloat(f.buffPay) || 0 : 0,
+      dataProject: active.dataProject ? parseFloat(f.dataProject) || 0 : 0,
       totalAmount,
       note: f.note,
       enteredBy: f.enteredBy,
@@ -9862,7 +9867,8 @@ function FinanceRequests({
       productDesktop: true,
       productMobile: false,
       marketing: false,
-      buffPay: false
+      buffPay: false,
+      dataProject: false
     });
     setTimeout(() => setSuccess(false), 3000);
     const defRecips = {};
