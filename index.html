@@ -393,7 +393,11 @@ const pctI = v => isNaN(v) || v == null ? "—" : Math.round(v) + "%";
 function calcPriceUSD(p) {
   return p.priceToBuffLocal * (FX[p.currency] || 1);
 }
+function isAllocActive(r) {
+  return !r || r.active !== false;
+}
 function calcDailyQty(r) {
+  if (!isAllocActive(r)) return 0;
   return (r.pulsesPerDay || 0) * (r.qtyPerPulse || 0);
 }
 function calcDailyBudget(p, r) {
@@ -1265,6 +1269,7 @@ function AllocationForm({
     const m = {};
     (existing || []).forEach(r => {
       m[r.productId] = {
+        ...r,
         pulsesPerDay: r.pulsesPerDay,
         qtyPerPulse: r.qtyPerPulse
       };
@@ -1689,6 +1694,7 @@ function AllocationForm({
         [country]: [...selRaffles]
       }));
       onSave(allocIds.map(pid => ({
+        ...rows[pid],
         productId: pid,
         pulsesPerDay: rows[pid].pulsesPerDay,
         qtyPerPulse: rows[pid].qtyPerPulse
@@ -2778,6 +2784,7 @@ function ProductsTab({
 
 function CountriesTab({
   products,
+  setProducts,
   allocs,
   setAllocs,
   raffles,
@@ -2786,6 +2793,14 @@ function CountriesTab({
 }) {
   const [selected, setSelected] = useState(null);
   const [modal, setModal] = useState(false);
+  const [editPid, setEditPid] = useState(null);
+  const updateAlloc = (country, pid, patch) => setAllocs(a => ({
+    ...a,
+    [country]: (a[country] || []).map(r => r.productId === pid ? {
+      ...r,
+      ...patch
+    } : r)
+  }));
   const countryData = COUNTRIES.map(c => {
     const rows = allocs[c] || [];
     const planned = rows.reduce((s, r) => {
@@ -2799,6 +2814,7 @@ function CountriesTab({
     return {
       country: c,
       rows,
+      activeCount: rows.filter(isAllocActive).length,
       planned,
       real,
       plannedM: planned * 30.5,
@@ -2877,7 +2893,7 @@ function CountriesTab({
       color: "#444",
       marginTop: 1
     }
-  }, c.rows.length, " products")), c.rows.length > 0 && /*#__PURE__*/React.createElement("div", {
+  }, c.activeCount === c.rows.length ? `${c.rows.length} products` : `${c.activeCount}/${c.rows.length} active`)), c.rows.length > 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 10,
       fontWeight: 800,
@@ -2919,7 +2935,7 @@ function CountriesTab({
       color: "#444",
       marginLeft: 12
     }
-  }, sel.rows.length, " product", sel.rows.length !== 1 ? "s" : "", " allocated")), /*#__PURE__*/React.createElement("button", {
+  }, sel.rows.length, " product", sel.rows.length !== 1 ? "s" : "", " allocated", sel.activeCount !== sel.rows.length ? ` \xB7 ${sel.rows.length - sel.activeCount} inactive` : "")), /*#__PURE__*/React.createElement("button", {
     onClick: () => setModal(true),
     style: {
       background: "#1a1a1a",
@@ -2935,7 +2951,7 @@ function CountriesTab({
       alignItems: "center",
       gap: 6
     }
-  }, /*#__PURE__*/React.createElement(Icon.edit, null), " Edit Allocations")), /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(Icon.plus, null), " Add Product")), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "grid",
       gridTemplateColumns: "repeat(5,1fr)",
@@ -2974,7 +2990,7 @@ function CountriesTab({
       fontSize: 12
     }
   }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("th", {
-    colSpan: 7,
+    colSpan: 9,
     style: {
       borderBottom: "1px solid #111",
       padding: "4px 0"
@@ -3006,11 +3022,15 @@ function CountriesTab({
       borderBottom: "1px solid #111",
       borderLeft: "1px solid #111"
     }
-  }, "REAL")), /*#__PURE__*/React.createElement("tr", {
+  }, "REAL"), /*#__PURE__*/React.createElement("th", {
+    style: {
+      borderBottom: "1px solid #111"
+    }
+  })), /*#__PURE__*/React.createElement("tr", {
     style: {
       borderBottom: "1px solid #1a1a1a"
     }
-  }, [TH("Brand"), TH("Demand"), TH("Pulses/day"), TH("Qty/pulse"), TH("Daily Qty"), TH("Interval"), TH("Utilization"), THp("Daily"), THr("Daily"), THp("Monthly"), THr("Monthly")])), (() => {
+  }, [TH("Active"), TH("Brand"), TH("Cost"), TH("Demand"), TH("Pulses/day"), TH("Qty/pulse"), TH("Daily Qty"), TH("Interval"), TH("Utilization"), THp("Daily"), THr("Daily"), THp("Monthly"), THr("Monthly"), TH("")])), (() => {
     const PURPOSES = ["MP", "Raffles", "Buff Pass"];
     const purposeColor = pu => pu === "MP" ? G : pu === "Raffles" ? "#a78bfa" : "#38bdf8";
     const renderRow = r => {
@@ -3022,14 +3042,27 @@ function CountriesTab({
       const ut = calcUtilization(p.demandLevel, r.pulsesPerDay);
       const ivh = (r.pulsesPerDay > 0 ? (24 / r.pulsesPerDay).toFixed(1) : "—") + "h";
       const pu = p.purpose || "MP";
+      const on = isAllocActive(r);
+      const dim = on ? 1 : 0.35;
       return /*#__PURE__*/React.createElement("tr", {
         key: r.productId,
         style: {
-          borderBottom: "1px solid #0d0d0d"
+          borderBottom: "1px solid #0d0d0d",
+          background: on ? "transparent" : "rgba(255,255,255,0.015)"
         }
       }, /*#__PURE__*/React.createElement("td", {
         style: {
           padding: "10px 16px"
+        }
+      }, /*#__PURE__*/React.createElement(ToggleSwitch, {
+        on: on,
+        onChange: v => updateAlloc(sel.country, r.productId, {
+          active: v
+        })
+      })), /*#__PURE__*/React.createElement("td", {
+        style: {
+          padding: "10px 16px",
+          opacity: dim
         }
       }, /*#__PURE__*/React.createElement("div", {
         style: {
@@ -3039,12 +3072,30 @@ function CountriesTab({
       }, p.brand), /*#__PURE__*/React.createElement("div", {
         style: {
           fontSize: 10,
-          color: "#333",
+          color: on ? "#333" : "#f87171",
           marginTop: 1
         }
-      }, p.type)), /*#__PURE__*/React.createElement("td", {
+      }, on ? p.type : "Inactive")), /*#__PURE__*/React.createElement("td", {
         style: {
-          padding: "10px 16px"
+          padding: "10px 16px",
+          opacity: dim,
+          whiteSpace: "nowrap"
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontWeight: 800,
+          color: "#f1f5f9"
+        }
+      }, usd(calcPriceUSD(p))), p.currency && p.currency !== "USD" && /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 10,
+          color: "#444",
+          marginTop: 1
+        }
+      }, Number(p.priceToBuffLocal).toLocaleString(), " ", p.currency)), /*#__PURE__*/React.createElement("td", {
+        style: {
+          padding: "10px 16px",
+          opacity: dim
         }
       }, /*#__PURE__*/React.createElement("span", {
         style: {
@@ -3061,14 +3112,16 @@ function CountriesTab({
           padding: "10px 16px",
           color: "#f1f5f9",
           fontWeight: 700,
-          textAlign: "center"
+          textAlign: "center",
+          opacity: dim
         }
       }, r.pulsesPerDay), /*#__PURE__*/React.createElement("td", {
         style: {
           padding: "10px 16px",
           color: "#f1f5f9",
           fontWeight: 700,
-          textAlign: "center"
+          textAlign: "center",
+          opacity: dim
         }
       }, r.qtyPerPulse), /*#__PURE__*/React.createElement("td", {
         style: {
@@ -3076,18 +3129,21 @@ function CountriesTab({
           color: G,
           fontWeight: 800,
           textAlign: "center",
-          fontSize: 14
+          fontSize: 14,
+          opacity: dim
         }
       }, dq), /*#__PURE__*/React.createElement("td", {
         style: {
           padding: "10px 16px",
           color: "#555",
-          fontSize: 11
+          fontSize: 11,
+          opacity: dim
         }
       }, ivh), /*#__PURE__*/React.createElement("td", {
         style: {
           padding: "10px 16px",
-          minWidth: 110
+          minWidth: 110,
+          opacity: dim
         }
       }, /*#__PURE__*/React.createElement(UtilBar, {
         util: ut
@@ -3095,27 +3151,47 @@ function CountriesTab({
         style: {
           padding: "10px 16px",
           color: "#444",
-          fontWeight: 600
+          fontWeight: 600,
+          opacity: dim
         }
       }, usd(db)), /*#__PURE__*/React.createElement("td", {
         style: {
           padding: "10px 16px",
           fontWeight: 800,
-          color: G
+          color: G,
+          opacity: dim
         }
       }, usd(rd)), /*#__PURE__*/React.createElement("td", {
         style: {
           padding: "10px 16px",
           color: "#444",
-          fontWeight: 600
+          fontWeight: 600,
+          opacity: dim
         }
       }, usd(db * 30.5)), /*#__PURE__*/React.createElement("td", {
         style: {
           padding: "10px 16px",
           fontWeight: 800,
-          color: G
+          color: G,
+          opacity: dim
         }
-      }, usd(rd * 30.5)));
+      }, usd(rd * 30.5)), /*#__PURE__*/React.createElement("td", {
+        style: {
+          padding: "10px 12px"
+        }
+      }, /*#__PURE__*/React.createElement("button", {
+        title: "Edit",
+        onClick: () => setEditPid(r.productId),
+        style: {
+          background: "#1a1a1a",
+          border: "1px solid #2a2a2a",
+          color: "#f1f5f9",
+          borderRadius: 6,
+          padding: 6,
+          cursor: "pointer",
+          display: "flex"
+        }
+      }, /*#__PURE__*/React.createElement(Icon.edit, null))));
     };
     return PURPOSES.map(pu => {
       const rows = sel.rows.filter(r => {
@@ -3130,7 +3206,7 @@ function CountriesTab({
           background: "#0a0a0a"
         }
       }, /*#__PURE__*/React.createElement("td", {
-        colSpan: 11,
+        colSpan: 14,
         style: {
           padding: "8px 16px"
         }
@@ -3153,7 +3229,7 @@ function CountriesTab({
       background: TOTAL_BG
     }
   }, /*#__PURE__*/React.createElement("td", {
-    colSpan: 7,
+    colSpan: 9,
     style: {
       padding: "11px 16px",
       fontWeight: 800,
@@ -3183,7 +3259,7 @@ function CountriesTab({
       fontWeight: 900,
       color: TOTAL_C
     }
-  }, usd(sel.realM)))))) : /*#__PURE__*/React.createElement("div", {
+  }, usd(sel.realM)), /*#__PURE__*/React.createElement("td", null))))) : /*#__PURE__*/React.createElement("div", {
     style: {
       padding: 40,
       textAlign: "center",
@@ -3203,7 +3279,7 @@ function CountriesTab({
       fontSize: 12,
       fontFamily: "inherit"
     }
-  }, "+ Set up allocations")), raffles && raffles.length > 0 && /*#__PURE__*/React.createElement("div", {
+  }, "+ Add product")), raffles && raffles.length > 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       borderTop: "1px solid #1a1a1a"
     }
@@ -3356,25 +3432,299 @@ function CountriesTab({
       fontSize: 13
     }
   }, "Select a country to view its allocations.")), modal && sel && /*#__PURE__*/React.createElement(Modal, {
-    title: `Allocations — ${sel.country}`,
-    onClose: () => setModal(false),
-    wide: true
-  }, /*#__PURE__*/React.createElement(AllocationForm, {
-    country: sel.country,
+    title: `Add product — ${sel.country}`,
+    onClose: () => setModal(false)
+  }, /*#__PURE__*/React.createElement(AllocRowEditor, {
     products: products,
-    existing: sel.rows,
-    raffles: raffles,
-    raffleCountries: raffleCountries,
-    setRaffleCountries: setRaffleCountries,
-    onSave: rows => {
+    available: products.filter(p => !sel.rows.some(r => r.productId === p.id)),
+    onSave: (row, prodPatch) => {
       setAllocs(a => ({
         ...a,
-        [sel.country]: rows
+        [sel.country]: [...(a[sel.country] || []), row]
       }));
+      if (prodPatch && setProducts) setProducts(ps => ps.map(x => x.id === row.productId ? {
+        ...x,
+        ...prodPatch
+      } : x));
       setModal(false);
     },
     onClose: () => setModal(false)
-  })));
+  })), editPid != null && sel && (() => {
+    const row = sel.rows.find(r => r.productId === editPid);
+    const prod = products.find(x => x.id === editPid);
+    if (!row || !prod) return null;
+    return /*#__PURE__*/React.createElement(Modal, {
+      title: `Edit ${prod.brand} — ${sel.country}`,
+      onClose: () => setEditPid(null)
+    }, /*#__PURE__*/React.createElement(AllocRowEditor, {
+      products: products,
+      row: row,
+      onSave: (next, prodPatch) => {
+        updateAlloc(sel.country, editPid, next);
+        if (prodPatch && setProducts) setProducts(ps => ps.map(x => x.id === editPid ? {
+          ...x,
+          ...prodPatch
+        } : x));
+        setEditPid(null);
+      },
+      onRemove: () => {
+        if (!window.confirm(`Remove ${prod.brand} from ${sel.country}? (To keep it but pause it, turn it off instead.)`)) return;
+        setAllocs(a => ({
+          ...a,
+          [sel.country]: (a[sel.country] || []).filter(r => r.productId !== editPid)
+        }));
+        setEditPid(null);
+      },
+      onClose: () => setEditPid(null)
+    }));
+  })());
+}
+
+// ── COUNTRY ROW EDITOR ──────────────────────────────────────────────────────
+function ToggleSwitch({
+  on,
+  onChange
+}) {
+  return /*#__PURE__*/React.createElement("button", {
+    type: "button",
+    title: on ? "Active — click to turn off" : "Inactive — click to turn on",
+    onClick: () => onChange(!on),
+    style: {
+      width: 34,
+      height: 18,
+      borderRadius: 9,
+      border: "none",
+      padding: 0,
+      cursor: "pointer",
+      position: "relative",
+      background: on ? G : "#2a2a2a",
+      transition: "background 0.15s",
+      flexShrink: 0
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      position: "absolute",
+      top: 2,
+      left: on ? 18 : 2,
+      width: 14,
+      height: 14,
+      borderRadius: "50%",
+      background: on ? "#0a0a0a" : "#666",
+      transition: "left 0.15s"
+    }
+  }));
+}
+function AllocRowEditor({
+  products,
+  available,
+  row,
+  onSave,
+  onRemove,
+  onClose
+}) {
+  const isNew = !row;
+  const [pid, setPid] = useState(row ? row.productId : available && available[0] ? available[0].id : "");
+  const [active, setActive] = useState(row ? isAllocActive(row) : true);
+  const [pulses, setPulses] = useState(row ? row.pulsesPerDay : 2);
+  const [qty, setQty] = useState(row ? row.qtyPerPulse : 1);
+  const prod = products.find(x => x.id === Number(pid));
+  const [price, setPrice] = useState(prod ? prod.priceToBuffLocal : "");
+  const [currency, setCurrency] = useState(prod ? prod.currency || "USD" : "USD");
+  const [demand, setDemand] = useState(prod ? prod.demandLevel : "Medium");
+  const pickProduct = id => {
+    setPid(id);
+    const p = products.find(x => x.id === Number(id));
+    if (p) {
+      setPrice(p.priceToBuffLocal);
+      setCurrency(p.currency || "USD");
+      setDemand(p.demandLevel);
+    }
+  };
+  const draftProd = prod ? {
+    ...prod,
+    priceToBuffLocal: parseFloat(price) || 0,
+    currency,
+    demandLevel: demand
+  } : null;
+  const draftRow = {
+    pulsesPerDay: parseInt(pulses) || 0,
+    qtyPerPulse: parseInt(qty) || 0
+  };
+  const db = draftProd ? calcDailyBudget(draftProd, draftRow) : 0;
+  const rd = draftProd ? calcRealDaily(draftProd, draftRow) : 0;
+  const prodChanged = !!prod && (draftProd.priceToBuffLocal !== prod.priceToBuffLocal || currency !== (prod.currency || "USD") || demand !== prod.demandLevel);
+  const valid = !!prod && draftRow.pulsesPerDay > 0 && draftRow.qtyPerPulse > 0 && draftProd.priceToBuffLocal > 0;
+  const sub = t => /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      fontWeight: 800,
+      color: "#555",
+      letterSpacing: "0.08em",
+      textTransform: "uppercase",
+      margin: "6px 0 12px",
+      paddingBottom: 6,
+      borderBottom: "1px solid #1a1a1a"
+    }
+  }, t);
+  const grid = (...kids) => /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr",
+      gap: 12
+    }
+  }, ...kids);
+  if (isNew && (!available || available.length === 0)) return /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: "#555",
+      fontSize: 13
+    }
+  }, "All products are already in this country.");
+  return /*#__PURE__*/React.createElement("div", null, isNew && /*#__PURE__*/React.createElement(Field, {
+    label: "Product"
+  }, /*#__PURE__*/React.createElement(Select, {
+    value: pid,
+    onChange: e => pickProduct(e.target.value)
+  }, available.map(p => /*#__PURE__*/React.createElement("option", {
+    key: p.id,
+    value: p.id
+  }, p.brand, " — ", p.type, " (", p.purpose || "MP", ")")))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      background: active ? "rgba(200,255,0,0.05)" : "#111",
+      border: `1px solid ${active ? "rgba(200,255,0,0.2)" : "#2a2a2a"}`,
+      borderRadius: 10,
+      padding: "12px 14px",
+      marginBottom: 18
+    }
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      fontWeight: 800,
+      color: active ? G : "#f87171"
+    }
+  }, active ? "Active" : "Inactive"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: "#555",
+      marginTop: 2
+    }
+  }, active ? "Counted in this country's budget" : "Stays in this country but counts as $0")), /*#__PURE__*/React.createElement(ToggleSwitch, {
+    on: active,
+    onChange: setActive
+  })), sub("This country"), grid(/*#__PURE__*/React.createElement(Field, {
+    label: "Pulses / day",
+    hint: draftRow.pulsesPerDay > 0 ? `every ${(24 / draftRow.pulsesPerDay).toFixed(1)}h` : null
+  }, /*#__PURE__*/React.createElement(Input, {
+    type: "number",
+    min: 1,
+    max: 24,
+    value: pulses,
+    onChange: e => setPulses(e.target.value)
+  })), /*#__PURE__*/React.createElement(Field, {
+    label: "Qty / pulse",
+    hint: `${draftRow.pulsesPerDay * draftRow.qtyPerPulse} per day`
+  }, /*#__PURE__*/React.createElement(Input, {
+    type: "number",
+    min: 1,
+    value: qty,
+    onChange: e => setQty(e.target.value)
+  }))), sub("Product — applies to all countries"), grid(/*#__PURE__*/React.createElement(Field, {
+    label: "Cost (price to Buff)",
+    hint: currency !== "USD" && draftProd ? `≈ ${usd(calcPriceUSD(draftProd))}` : null
+  }, /*#__PURE__*/React.createElement(Input, {
+    type: "number",
+    min: 0,
+    step: "0.01",
+    value: price,
+    onChange: e => setPrice(e.target.value)
+  })), /*#__PURE__*/React.createElement(Field, {
+    label: "Currency"
+  }, /*#__PURE__*/React.createElement(Select, {
+    value: currency,
+    onChange: e => setCurrency(e.target.value)
+  }, CURRENCIES.map(c => /*#__PURE__*/React.createElement("option", {
+    key: c,
+    value: c
+  }, c))))), /*#__PURE__*/React.createElement(Field, {
+    label: "Demand level"
+  }, /*#__PURE__*/React.createElement(Select, {
+    value: demand,
+    onChange: e => setDemand(e.target.value)
+  }, DEMAND_LEVELS.map(d => /*#__PURE__*/React.createElement("option", {
+    key: d,
+    value: d
+  }, d)))), prodChanged && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: "#fb923c",
+      background: "rgba(251,146,60,0.08)",
+      border: "1px solid rgba(251,146,60,0.25)",
+      borderRadius: 8,
+      padding: "8px 12px",
+      marginBottom: 14
+    }
+  }, "Cost / currency / demand will change for this product in every country."), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "repeat(3,1fr)",
+      gap: 10,
+      background: "#111",
+      border: "1px solid #1a1a1a",
+      borderRadius: 10,
+      padding: "12px 14px",
+      marginBottom: 18,
+      opacity: active ? 1 : 0.4
+    }
+  }, [["Planned daily", usd(db), "#888"], ["Real daily", usd(rd), G], ["Real monthly", usd(rd * 30.5), G]].map(([l, v, c]) => /*#__PURE__*/React.createElement("div", {
+    key: l
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: "#444",
+      fontWeight: 700,
+      textTransform: "uppercase",
+      letterSpacing: "0.06em"
+    }
+  }, l), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 15,
+      fontWeight: 900,
+      color: c,
+      marginTop: 3
+    }
+  }, v)))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8
+    }
+  }, onRemove && /*#__PURE__*/React.createElement(Btn, {
+    variant: "danger",
+    small: true,
+    onClick: onRemove
+  }, /*#__PURE__*/React.createElement(Icon.trash, null), " Remove from country"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }), /*#__PURE__*/React.createElement(Btn, {
+    variant: "ghost",
+    onClick: onClose
+  }, "Cancel"), /*#__PURE__*/React.createElement(Btn, {
+    variant: "primary",
+    disabled: !valid,
+    onClick: () => valid && onSave({
+      productId: prod.id,
+      pulsesPerDay: draftRow.pulsesPerDay,
+      qtyPerPulse: draftRow.qtyPerPulse,
+      active
+    }, prodChanged ? {
+      priceToBuffLocal: draftProd.priceToBuffLocal,
+      currency,
+      demandLevel: demand
+    } : null)
+  }, isNew ? "Add product" : "Save")));
 }
 
 // ── STEP INDICATOR ────────────────────────────────────────────────────────────
@@ -4956,7 +5306,7 @@ function CountryDrillDown({
 
   // ── Planned baseline — derived from allocs (no extra API call needed) ───────
   const allocation = (allocs[country] || []).find(a => a.productId === selId);
-  const plannedPerDay = allocation ? allocation.pulsesPerDay * allocation.qtyPerPulse : 0;
+  const plannedPerDay = allocation ? calcDailyQty(allocation) : 0;
   const totalPlanned = plannedPerDay * days;
   const gap = total - totalPlanned;
   const coverage = totalPlanned > 0 ? Math.round(total / totalPlanned * 100) : null;
@@ -5584,7 +5934,7 @@ function CountryProductView({
   function plannedTotal(alloc) {
     const prod = products.find(p => p.id === alloc.productId);
     if (!prod) return 0;
-    return alloc.pulsesPerDay * alloc.qtyPerPulse * calcPriceUSD(prod) * days;
+    return calcDailyQty(alloc) * calcPriceUSD(prod) * days;
   }
 
   // Planned products that had no Redash match (score >= 3)
@@ -12759,6 +13109,7 @@ function App() {
     setAllocateMode: setAllocateMode
   }), tab === "countries" && /*#__PURE__*/React.createElement(CountriesTab, {
     products: products,
+    setProducts: setProducts,
     allocs: allocs,
     setAllocs: setAllocs,
     raffles: raffles,
