@@ -383,6 +383,23 @@ const INITIAL_ALLOCS = {
 
 // ── HELPERS ──────────────────────────────────────────────────────────────────
 
+// Data-safety guards for the full-state auto-save (see App load/save effects)
+function isValidState(d) {
+  return !!d && !d.error && Array.isArray(d.products) && d.allocs && typeof d.allocs === "object" && Array.isArray(d.transactions);
+}
+function stateCounts(d) {
+  return {
+    products: (d.products || []).length,
+    allocs: Object.values(d.allocs || {}).reduce((s, rows) => s + (rows || []).length, 0),
+    transactions: (d.transactions || []).length,
+    raffles: (d.raffles || []).length
+  };
+}
+// A save that empties a collection that had 3+ items, or drops more than half of it at once, is treated as a wipe
+function looksLikeWipe(was, cur) {
+  return Object.keys(was).some(k => was[k] >= 3 && (cur[k] === 0 || cur[k] < was[k] / 2));
+}
+
 const usd = v => isNaN(v) || v == null ? "—" : "$" + Number(v).toLocaleString("en-US", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2
@@ -8050,6 +8067,7 @@ function AdminTab({
   function syncToCloud() {
     setSyncStatus("saving");
     fetch(SCRIPT_URL + "?action=getAll&key=" + APP_KEY).then(r => r.json()).then(data => {
+      if (!isValidState(data)) throw new Error("Invalid data from server");
       const merged = {
         ...data,
         appUsers
@@ -12521,6 +12539,9 @@ function App() {
   const [allocateMode, setAllocateMode] = useState("mp");
   const [saveStatus, setSaveStatus] = useState("loading");
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const loadedCounts = useRef(null); // sizes of the data the server returned; null = never loaded OK -> never save
   const saveTimer = useRef(null);
   const [authed, setAuthed] = useState(() => sessionStorage.getItem("buff_auth") === "1");
   const [displayName, setDisplayName] = useState(() => sessionStorage.getItem("buff_display") || "");
@@ -12588,8 +12609,10 @@ function App() {
   // Load from Google Sheets on mount (only when authed)
   useEffect(() => {
     if (!authed) return;
+    setLoadError(false);
     fetch(SCRIPT_URL + "?key=" + APP_KEY).then(r => r.json()).then(data => {
-      setProducts(data.products || []);
+      if (!isValidState(data)) throw new Error("Invalid data from server");
+      setProducts(data.products);
       setAllocs(data.allocs || {});
       setOrders(data.orders || []);
       setTransactions(data.transactions || []);
@@ -12600,24 +12623,32 @@ function App() {
         setAppUsers(data.appUsers);
         localStorage.setItem("buff_appUsers", JSON.stringify(data.appUsers));
       }
+      loadedCounts.current = stateCounts(data);
       setSaveStatus("saved");
       setLoaded(true);
     }).catch(() => {
-      setProducts([]);
-      setAllocs({});
-      setOrders([]);
-      setTransactions([]);
-      setRaffles([]);
-      setRaffleCountries({});
-      setBudgetExtras([]);
+      // Do NOT continue with empty data and do NOT save — show an error screen with Retry.
+      loadedCounts.current = null;
       setSaveStatus("error");
-      setLoaded(true);
+      setLoadError(true);
     });
-  }, [authed]);
+  }, [authed, loadAttempt]);
 
   // Auto-save on every change (debounced 1.5s)
   useEffect(() => {
-    if (!loaded) return;
+    if (!loaded || !loadedCounts.current) return;
+    const cur = stateCounts({
+      products,
+      allocs,
+      transactions,
+      raffles
+    });
+    const was = loadedCounts.current;
+    if (looksLikeWipe(was, cur)) {
+      console.error("BuffOps: save blocked — would erase data", was, cur);
+      setSaveStatus("error");
+      return;
+    }
     setSaveStatus("saving");
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
@@ -12634,7 +12665,10 @@ function App() {
           raffleCountries,
           budgetExtras
         })
-      }).then(() => setSaveStatus("saved")).catch(() => setSaveStatus("error"));
+      }).then(() => {
+        loadedCounts.current = cur;
+        setSaveStatus("saved");
+      }).catch(() => setSaveStatus("error"));
     }, 1500);
   }, [products, allocs, orders, transactions, appUsers, raffles, raffleCountries, budgetExtras]);
 
@@ -12773,6 +12807,46 @@ function App() {
       letterSpacing: "0.02em"
     }
   }, "Sign In"))));
+
+  if (loadError && !loaded) return /*#__PURE__*/React.createElement("div", {
+    style: {
+      minHeight: "100vh",
+      background: "#080808",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 14,
+      fontFamily: "'DM Sans','Segoe UI',sans-serif",
+      color: "#f1f5f9",
+      textAlign: "center",
+      padding: 20
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 18,
+      fontWeight: 800
+    }
+  }, "Couldn't load data from Google Sheets"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: "#666",
+      maxWidth: 420
+    }
+  }, "Nothing was changed or saved. Your data is safe \u2014 try again in a moment."), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setLoadAttempt(n => n + 1),
+    style: {
+      background: "#c8ff00",
+      color: "#0a0a0a",
+      border: "none",
+      borderRadius: 8,
+      padding: "10px 22px",
+      fontWeight: 800,
+      fontSize: 13,
+      cursor: "pointer",
+      fontFamily: "inherit"
+    }
+  }, "Retry"));
 
   // Show loading screen until Sheets data is ready
   if (!loaded) return /*#__PURE__*/React.createElement("div", {
