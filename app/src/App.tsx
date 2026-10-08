@@ -4,11 +4,12 @@ import { StoreProvider, useStore } from './lib/store'
 import { C } from './ui/kit'
 import Countries from './screens/Countries'
 import Dashboard from './screens/Dashboard'
+import Products from './screens/Products'
 
 type Route = 'dashboard' | 'products' | 'countries' | 'budget' | 'allocate' | 'fulfillment' | 'admin'
 const TABS: { id: Route; name: string; admin?: boolean; ready: boolean }[] = [
   { id: 'dashboard', name: 'Dashboard', ready: true },
-  { id: 'products', name: 'Products', ready: false },
+  { id: 'products', name: 'Products', ready: true },
   { id: 'countries', name: 'Countries', ready: true },
   { id: 'budget', name: 'Budget', ready: false },
   { id: 'allocate', name: 'Allocate', ready: false },
@@ -132,6 +133,7 @@ function Shell() {
       <main key={current.id} style={{ flex: 1 }}>
         {current.id === 'dashboard' && <Dashboard go={go} />}
         {current.id === 'countries' && <Countries />}
+        {current.id === 'products' && <Products />}
         {!current.ready && <Soon name={current.name} />}
       </main>
     </div>

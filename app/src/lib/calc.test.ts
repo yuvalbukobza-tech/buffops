@@ -65,3 +65,16 @@ describe('Redash matching (v1 scoring)', () => {
     expect(priceFromName('1lb Ocean Cleanup!')).toBe(0)
   })
 })
+
+describe('product stats', () => {
+  it('sums a product across countries and finds orphans', async () => {
+    const { productStats, orphanRows } = await import('./calc')
+    const p = prod({ id: 7, priceToBuffLocal: 10, demandLevel: 'Low' })
+    const allocs = { US: [{ productId: 7, pulsesPerDay: 1, qtyPerPulse: 1 }], GB: [{ productId: 7, pulsesPerDay: 1, qtyPerPulse: 1, active: false }, { productId: 99, pulsesPerDay: 1, qtyPerPulse: 1 }] }
+    const s = productStats(allocs, [p])[0]
+    expect(s.countries).toEqual(['US', 'GB'])
+    expect(s.activeRows).toBe(1)
+    expect(s.monthly).toBeCloseTo(10 * 0.4 * 30.5)
+    expect(orphanRows(allocs, [p])).toEqual([{ country: 'GB', count: 1 }])
+  })
+})

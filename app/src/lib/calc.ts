@@ -131,3 +131,27 @@ export function vendorBudgets(allocs: Allocs, products: Product[], raffles: Raff
   for (const e of extras) add(e.vendor, e.purpose || 'MP', e.monthly || 0)
   return [...map.values()].sort((a, b) => b.monthly - a.monthly)
 }
+
+export interface ProductStat { product: Product; monthly: number; countries: string[]; rows: number; activeRows: number }
+
+/** Per product: real monthly budget across every country (incl. GLOBAL), where it runs, and how many rows are live. */
+export function productStats(allocs: Allocs, products: Product[]): ProductStat[] {
+  const map = new Map<number, ProductStat>(products.map((p) => [p.id, { product: p, monthly: 0, countries: [], rows: 0, activeRows: 0 }]))
+  for (const [country, rows] of Object.entries(allocs)) {
+    for (const r of rows || []) {
+      const st = map.get(r.productId)
+      if (!st) continue
+      st.rows++
+      if (isAllocActive(r)) st.activeRows++
+      if (!st.countries.includes(country)) st.countries.push(country)
+      st.monthly += calcRealDaily(st.product, r) * DAYS_PER_MONTH
+    }
+  }
+  return [...map.values()]
+}
+
+/** Allocation rows whose product no longer exists, per country. */
+export function orphanRows(allocs: Allocs, products: Product[]): { country: string; count: number }[] {
+  const ids = new Set(products.map((p) => p.id))
+  return Object.entries(allocs).map(([country, rows]) => ({ country, count: (rows || []).filter((r) => !ids.has(r.productId)).length })).filter((x) => x.count > 0)
+}
