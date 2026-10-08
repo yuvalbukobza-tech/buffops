@@ -80,3 +80,38 @@ export async function sendEmail(to: string[], subject: string, body: string, sen
   const d = (await getJson(`${API_URL}?${p.toString()}`, 1)) as { ok?: boolean; error?: string }
   if (!d.ok) throw new Error(d.error || 'Email failed')
 }
+
+// ── Amazon fulfillment (rows live in the sheet's "Fulfillment" tab, not in the app state) ──
+export interface FulfillRow {
+  token: string; key: string; userId: string; name: string; email: string; product: string; purchaseDate: string; status: string
+  fullName?: string; address?: string; apt?: string; city?: string; state?: string; zip?: string; country?: string; phone?: string
+  orderNumber?: string; createdAt?: string; emailedAt?: string; detailsAt?: string; orderedAt?: string; doneAt?: string; notes?: string; amount?: string | number
+}
+
+function qs(params: Record<string, string | undefined>) {
+  return Object.entries(params).map(([k, v]) => `${k}=${encodeURIComponent(v ?? '')}`).join('&')
+}
+
+/** Read-only: the rows already in the sheet. */
+export async function fulfillList(): Promise<FulfillRow[]> {
+  const d = (await getJson(`${API_URL}?action=fulfillList&key=${APP_KEY}`, 2)) as { rows?: FulfillRow[]; error?: string }
+  if (d.error) throw new Error(d.error)
+  return d.rows || []
+}
+
+/** Writes: pulls new owed customers from Redash into the sheet. Disabled in preview mode. */
+export async function fulfillPull(): Promise<FulfillRow[]> {
+  if (!WRITE_ENABLED) throw new Error('Pulling from Redash writes to the sheet — disabled in preview mode')
+  const d = (await getJson(`${API_URL}?action=fulfillPull&key=${APP_KEY}`, 1)) as { rows?: FulfillRow[]; error?: string }
+  if (d.error) throw new Error(d.error)
+  return d.rows || []
+}
+
+/** Writes / emails customers: fulfillEmail1, fulfillEmail2, fulfillSetStatus. Disabled in preview mode. */
+export async function fulfillAction(action: 'fulfillEmail1' | 'fulfillEmail2' | 'fulfillSetStatus', params: Record<string, string | undefined>): Promise<void> {
+  if (!WRITE_ENABLED) throw new Error('Emails to customers and status changes are disabled in preview mode')
+  const d = (await getJson(`${API_URL}?action=${action}&${qs(params)}&key=${APP_KEY}`, 1)) as { error?: string }
+  if (d && d.error) throw new Error(d.error)
+}
+
+export const fulfillFormLink = (token: string) => `${API_URL}?action=fulfillForm&token=${encodeURIComponent(token)}`

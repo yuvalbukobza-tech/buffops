@@ -8,6 +8,7 @@ import Dashboard from './screens/Dashboard'
 import Products from './screens/Products'
 import Budget from './screens/Budget'
 import Allocate from './screens/Allocate'
+import Fulfillment from './screens/Fulfillment'
 
 type Route = 'dashboard' | 'products' | 'countries' | 'budget' | 'allocate' | 'fulfillment' | 'admin'
 const TABS: { id: Route; name: string; admin?: boolean; ready: boolean }[] = [
@@ -16,7 +17,7 @@ const TABS: { id: Route; name: string; admin?: boolean; ready: boolean }[] = [
   { id: 'countries', name: 'Countries', ready: true },
   { id: 'budget', name: 'Budget', ready: true },
   { id: 'allocate', name: 'Allocate', ready: true },
-  { id: 'fulfillment', name: 'Fulfillment', admin: true, ready: false },
+  { id: 'fulfillment', name: 'Fulfillment', admin: true, ready: true },
   { id: 'admin', name: 'Admin', admin: true, ready: false },
 ]
 
@@ -141,6 +142,7 @@ function Shell() {
         {current.id === 'products' && <Products />}
         {current.id === 'budget' && <Budget />}
         {current.id === 'allocate' && <Allocate />}
+        {current.id === 'fulfillment' && session.isAdmin && <Fulfillment />}
         {!current.ready && <Soon name={current.name} />}
       </main>
       </SessionCtx.Provider>
