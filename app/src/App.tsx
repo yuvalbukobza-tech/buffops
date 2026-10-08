@@ -55,7 +55,7 @@ function Login({ onDone }: { onDone: (s: Session) => void }) {
     <Center>
       <form onSubmit={submit} className="card a-up" style={{ width: 360, padding: '40px 36px', display: 'flex', flexDirection: 'column', gap: 14, textAlign: 'left' }}>
         <Logo size={28} />
-        <div className="caption" style={{ marginBottom: 8 }}>Planning platform · v2 preview</div>
+        <div className="caption" style={{ marginBottom: 8 }}>Planning platform</div>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}><span className="caption">Username</span><input className="input" autoComplete="username" value={u} onChange={(e) => setU(e.target.value)} autoFocus /></label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}><span className="caption">Password</span><input className="input" type="password" autoComplete="current-password" value={p} onChange={(e) => setP(e.target.value)} /></label>
         {err && <div style={{ fontSize: 12, color: C.bad }}>Incorrect username or password.</div>}
@@ -81,7 +81,7 @@ function PreviewBanner() {
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, padding: '8px 16px', background: '#1A1408', borderBottom: '1px solid #3D2A0A', fontSize: 12, color: C.warn, flexWrap: 'wrap' }}>
       <span>v2 preview with live data — try anything, nothing is saved. Keep using the current BuffOps for real work.</span>
       {dirty && <button className="btn small" onClick={discard}>Reset my changes</button>}
-      <a href="/buffops/" style={{ color: C.warn }}>Open current BuffOps</a>
+      <a href="/buffops/v1/" style={{ color: C.warn }}>Open the old BuffOps</a>
     </div>
   )
 }
@@ -91,7 +91,7 @@ function Soon({ name }: { name: string }) {
     <Center>
       <div className="h2" style={{ fontSize: 20 }}>{name} is being rebuilt</div>
       <div className="caption">It will appear here soon. Until then, use it in the current BuffOps.</div>
-      <a className="btn" href="/buffops/">Open current BuffOps</a>
+      <a className="btn" href="/buffops/v1/">Open the old BuffOps (read-only)</a>
     </Center>
   )
 }
