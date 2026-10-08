@@ -70,3 +70,13 @@ export async function fetchRedash(from: string, to: string): Promise<RedashRow[]
   if (d.error) throw new Error(d.error)
   return d.rows || []
 }
+
+/** Sends a plain-text email through the backend (Gmail of the script owner). Disabled in preview mode. */
+export async function sendEmail(to: string[], subject: string, body: string, sender?: { name: string; email?: string }): Promise<void> {
+  if (!WRITE_ENABLED) throw new Error('Emails are not sent in preview mode')
+  const p = new URLSearchParams({ action: 'sendEmail', key: APP_KEY, to: to.join(','), subject, body })
+  if (sender?.name) p.set('senderName', sender.name)
+  if (sender?.email) p.set('senderEmail', sender.email)
+  const d = (await getJson(`${API_URL}?${p.toString()}`, 1)) as { ok?: boolean; error?: string }
+  if (!d.ok) throw new Error(d.error || 'Email failed')
+}

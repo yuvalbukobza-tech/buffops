@@ -1,38 +1,12 @@
-import { useEffect, useMemo, useState } from 'react'
-import { fetchRedash } from '../lib/api'
+import { useMemo, useState } from 'react'
+import { useRedash, type Range } from '../lib/redash'
 import { COUNTRIES, DAYS_PER_MONTH, priceFromName, summarizeCountry, vendorBudgets } from '../lib/calc'
 import { useData } from '../lib/store'
-import { DEPTS, type RedashRow, type Transaction } from '../lib/types'
+import { DEPTS, type Transaction } from '../lib/types'
 import { C, Card, Icon, Kpi, Seg, money, useEntrance } from '../ui/kit'
 
-type Range = '7' | '17' | '30'
-const iso = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
 const VENDOR_COLORS = [C.lime, C.sky, C.violet, C.orange, C.pink, C.good]
 const DEPT_META: Record<string, [string, string]> = { productDesktop: ['Product Desktop', C.lime], productMobile: ['Product Mobile', C.sky], marketing: ['Marketing', C.orange], buffPay: ['Buff Pay', C.violet], dataProject: ['Data project', C.pink] }
-
-// Redash results are cached per range for the browser session — the query is slow (≈1 min).
-const cache = new Map<string, RedashRow[]>()
-function useRedash(range: Range) {
-  const to = iso(new Date())
-  const from = iso(new Date(Date.now() - (Number(range) - 1) * 86400000))
-  const key = `${from}_${to}`
-  const [rows, setRows] = useState<RedashRow[] | null>(() => cache.get(key) || readSession(key))
-  const [state, setState] = useState<'idle' | 'loading' | 'error'>('idle')
-  const [error, setError] = useState('')
-  const load = (force = false) => {
-    if (!force && (cache.get(key) || readSession(key))) { setRows(cache.get(key) || readSession(key)); return }
-    setState('loading'); setError('')
-    fetchRedash(from, to)
-      .then((r) => { cache.set(key, r); try { sessionStorage.setItem('bo2_redash_' + key, JSON.stringify(r)) } catch { /* full */ } setRows(r); setState('idle') })
-      .catch((e: unknown) => { setError(e instanceof Error ? e.message : String(e)); setState('error') })
-  }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { setRows(cache.get(key) || readSession(key)); load() }, [key])
-  return { rows, loading: state === 'loading', error, from, to, days: Number(range), refresh: () => load(true) }
-}
-function readSession(key: string): RedashRow[] | null {
-  try { return JSON.parse(sessionStorage.getItem('bo2_redash_' + key) || 'null') } catch { return null }
-}
 
 function squarify<T extends { v: number }>(items: T[], x: number, y: number, w: number, h: number): (T & { x: number; y: number; w: number; h: number })[] {
   if (items.length === 0) return []

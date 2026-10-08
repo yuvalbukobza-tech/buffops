@@ -1,17 +1,19 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { login, logout, restoreSession, type Session } from './lib/auth'
+import { SessionCtx } from './lib/session'
 import { StoreProvider, useStore } from './lib/store'
 import { C } from './ui/kit'
 import Countries from './screens/Countries'
 import Dashboard from './screens/Dashboard'
 import Products from './screens/Products'
+import Budget from './screens/Budget'
 
 type Route = 'dashboard' | 'products' | 'countries' | 'budget' | 'allocate' | 'fulfillment' | 'admin'
 const TABS: { id: Route; name: string; admin?: boolean; ready: boolean }[] = [
   { id: 'dashboard', name: 'Dashboard', ready: true },
   { id: 'products', name: 'Products', ready: true },
   { id: 'countries', name: 'Countries', ready: true },
-  { id: 'budget', name: 'Budget', ready: false },
+  { id: 'budget', name: 'Budget', ready: true },
   { id: 'allocate', name: 'Allocate', ready: false },
   { id: 'fulfillment', name: 'Fulfillment', admin: true, ready: false },
   { id: 'admin', name: 'Admin', admin: true, ready: false },
@@ -130,12 +132,15 @@ function Shell() {
           </div>
         </div>
       </header>
+      <SessionCtx.Provider value={session}>
       <main key={current.id} style={{ flex: 1 }}>
         {current.id === 'dashboard' && <Dashboard go={go} />}
         {current.id === 'countries' && <Countries />}
         {current.id === 'products' && <Products />}
+        {current.id === 'budget' && <Budget />}
         {!current.ready && <Soon name={current.name} />}
       </main>
+      </SessionCtx.Provider>
     </div>
   )
 }

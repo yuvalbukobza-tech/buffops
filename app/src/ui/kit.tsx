@@ -96,3 +96,13 @@ export const Icon = {
   warn: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 9v4M12 17h.01" /><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" /></svg>,
   refresh: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8" /><path d="M21 3v5h-5" /></svg>,
 }
+
+export function Toast({ text, onDone }: { text: string; onDone: () => void }) {
+  const done = useRef(onDone)
+  done.current = onDone
+  useEffect(() => {
+    const id = window.setTimeout(() => done.current(), 3200)
+    return () => window.clearTimeout(id)
+  }, [text])
+  return <div className="card a-up" role="status" style={{ position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', padding: '12px 18px', zIndex: 60, fontSize: 13, borderColor: '#3A3D44', animationDuration: '.3s' }}>{text}</div>
+}

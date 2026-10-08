@@ -78,3 +78,14 @@ describe('product stats', () => {
     expect(orphanRows(allocs, [p])).toEqual([{ country: 'GB', count: 1 }])
   })
 })
+
+describe('matching fixes in v2', () => {
+  it('a configured name that differs from Redash still matches by brand + price', () => {
+    const p = [prod({ id: 1, brand: 'Roblox', priceToBuffLocal: 10, redashName: '$10 Roblox Game eCard' })]
+    expect(matchProduct('$10 Roblox Gift Card', [{ productId: 1, pulsesPerDay: 1, qtyPerPulse: 1 }], p)?.score).toBe(4)
+  })
+  it('leading spaces in stored names do not matter', () => {
+    const p = [prod({ id: 1, redashName: ' $5 Riot Access Code US' })]
+    expect(matchProduct('$5 Riot Access Code US', [{ productId: 1, pulsesPerDay: 1, qtyPerPulse: 1 }], p)?.via).toBe('exact')
+  })
+})

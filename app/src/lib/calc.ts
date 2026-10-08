@@ -64,21 +64,29 @@ export function priceFromName(name: string | null | undefined): number {
 
 export interface Match { alloc: AllocRow; score: number; via: 'exact' | 'auto'; weak?: boolean }
 
-/** Match a Redash product name to one of a country's allocations (v1 scoring, score ≥3 = match, 2 = weak). */
+/** Lower-case, drop currency signs and extra spaces, so names compare on their words. */
+export const normName = (s: string) => s.toLowerCase().replace(/[£€$]/g, '').replace(/\s+/g, ' ').trim()
+
+/**
+ * Match a Redash product name to one of a country's allocations.
+ * Scores as in v1 (5 configured name, 4 brand+price, 3 brand only, 2 weak), with one v2 fix:
+ * a configured name that does not match Redash (e.g. "Game eCard" vs "Gift Card") no longer blocks
+ * auto-matching by brand + price.
+ */
 export function matchProduct(redashName: string, countryAllocs: AllocRow[], products: Product[]): Match | null {
   const redashPrice = priceFromName(redashName)
+  const nameNorm = normName(redashName)
   const nameLower = redashName.toLowerCase()
   let best: Match | null = null
   for (const alloc of countryAllocs) {
     const prod = products.find((p) => p.id === alloc.productId)
     if (!prod) continue
-    const configured = (prod.redashName || '').trim()
+    const configured = normName(prod.redashName || '')
     const usd = calcPriceUSD(prod)
     let score = 0
     let via: Match['via'] = 'auto'
-    if (configured) {
-      if (nameLower.includes(configured.toLowerCase())) { score = 5; via = 'exact' }
-    } else {
+    if (configured && nameNorm.includes(configured)) { score = 5; via = 'exact' }
+    else {
       const hasBrand = nameLower.includes(prod.brand.toLowerCase())
       const hasPrice = redashPrice > 0 && usd > 0
       const close = hasPrice && Math.abs(redashPrice - usd) / Math.max(redashPrice, usd) < 0.02
