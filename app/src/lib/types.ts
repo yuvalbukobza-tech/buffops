@@ -79,6 +79,8 @@ export interface AppUser {
   username: string
   password?: string
   defaultRecipient?: boolean
+  /** v2 access level. Missing = Editor (Admin for the built-in admin usernames). v1 ignores this field. */
+  access?: 'Admin' | 'Editor' | 'Viewer'
 }
 
 export interface VendorOrder {

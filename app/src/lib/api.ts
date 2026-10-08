@@ -115,3 +115,12 @@ export async function fulfillAction(action: 'fulfillEmail1' | 'fulfillEmail2' | 
 }
 
 export const fulfillFormLink = (token: string) => `${API_URL}?action=fulfillForm&token=${encodeURIComponent(token)}`
+
+export interface BackupEntry { row: number; at: string; counts: string }
+
+/** Read-only: snapshots the server keeps (every save + one per day). */
+export async function listBackups(): Promise<{ Backups: BackupEntry[]; DailyBackups: BackupEntry[] }> {
+  const d = (await getJson(`${API_URL}?action=backups&key=${APP_KEY}`, 2)) as { Backups?: BackupEntry[]; DailyBackups?: BackupEntry[]; error?: string }
+  if (d.error) throw new Error(d.error)
+  return { Backups: d.Backups || [], DailyBackups: d.DailyBackups || [] }
+}

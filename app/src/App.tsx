@@ -9,6 +9,7 @@ import Products from './screens/Products'
 import Budget from './screens/Budget'
 import Allocate from './screens/Allocate'
 import Fulfillment from './screens/Fulfillment'
+import Admin from './screens/Admin'
 
 type Route = 'dashboard' | 'products' | 'countries' | 'budget' | 'allocate' | 'fulfillment' | 'admin'
 const TABS: { id: Route; name: string; admin?: boolean; ready: boolean }[] = [
@@ -18,7 +19,7 @@ const TABS: { id: Route; name: string; admin?: boolean; ready: boolean }[] = [
   { id: 'budget', name: 'Budget', ready: true },
   { id: 'allocate', name: 'Allocate', ready: true },
   { id: 'fulfillment', name: 'Fulfillment', admin: true, ready: true },
-  { id: 'admin', name: 'Admin', admin: true, ready: false },
+  { id: 'admin', name: 'Admin', admin: true, ready: true },
 ]
 
 function useRoute(): [Route, (r: Route) => void] {
@@ -67,7 +68,7 @@ function Login({ onDone }: { onDone: (s: Session) => void }) {
 function SaveIndicator() {
   const { saveStatus } = useStore()
   const map: Record<string, [string, string]> = {
-    idle: ['', C.faint], preview: ['Preview · not saved', C.warn], saving: ['Saving…', C.warn], saved: ['Saved', C.good], blocked: ['Save blocked', C.bad], error: ['Save failed', C.bad],
+    idle: ['', C.faint], viewer: ['View only', C.sky], preview: ['Preview · not saved', C.warn], saving: ['Saving…', C.warn], saved: ['Saved', C.good], blocked: ['Save blocked', C.bad], error: ['Save failed', C.bad],
   }
   const [text, color] = map[saveStatus] || map.idle
   return <div className="row hide-sm" style={{ gap: 8, fontSize: 12, color: C.muted }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: color }} />{text}</div>
@@ -96,12 +97,13 @@ function Soon({ name }: { name: string }) {
 }
 
 function Shell() {
-  const { status, error, reload, state } = useStore()
+  const { status, error, reload, state, setViewOnly } = useStore()
   const [session, setSession] = useState<Session | null>(null)
   const [route, go] = useRoute()
   const [menu, setMenu] = useState(false)
 
   useEffect(() => { if (state && !session) setSession(restoreSession(state.appUsers)) }, [state, session])
+  useEffect(() => { setViewOnly(session?.access === 'Viewer') }, [session, setViewOnly])
 
   if (status === 'loading' && !state) return <Center><Logo size={28} /><div className="caption">Loading data from Google Sheets…</div><div style={{ width: 22, height: 22, border: `2px solid ${C.line2}`, borderTopColor: C.lime, borderRadius: '50%', animation: 'bo-spin .8s linear infinite' }} /></Center>
   if (status === 'error') return <Center><div className="h2" style={{ fontSize: 18 }}>Couldn't load data from Google Sheets</div><div className="caption" style={{ maxWidth: 420 }}>Nothing was changed or saved. {error}</div><button className="btn primary" onClick={reload}>Retry</button></Center>
@@ -128,7 +130,7 @@ function Shell() {
             <button aria-label="Account menu" onClick={() => setMenu(!menu)} style={{ width: 32, height: 32, borderRadius: '50%', border: `1px solid ${C.line2}`, background: '#16181B', color: C.text, fontWeight: 600, cursor: 'pointer' }}>{session.display[0]}</button>
             {menu && (
               <div className="card a-up" style={{ position: 'absolute', right: 0, top: 42, width: 220, padding: 14, display: 'flex', flexDirection: 'column', gap: 10, animationDuration: '.3s' }}>
-                <div><div style={{ fontWeight: 600 }}>{session.display}</div><div className="caption">{session.isAdmin ? 'Administrator' : 'Member'}</div></div>
+                <div><div style={{ fontWeight: 600 }}>{session.display}</div><div className="caption">{session.access === 'Admin' ? 'Administrator' : session.access === 'Viewer' ? 'Viewer · read only' : 'Editor'}</div></div>
                 <button className="btn small" onClick={() => { logout(); setSession(null); setMenu(false) }}>Sign out</button>
               </div>
             )}
@@ -143,6 +145,7 @@ function Shell() {
         {current.id === 'budget' && <Budget />}
         {current.id === 'allocate' && <Allocate />}
         {current.id === 'fulfillment' && session.isAdmin && <Fulfillment />}
+        {current.id === 'admin' && session.isAdmin && <Admin />}
         {!current.ready && <Soon name={current.name} />}
       </main>
       </SessionCtx.Provider>

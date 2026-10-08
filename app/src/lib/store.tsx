@@ -3,7 +3,7 @@ import { WRITE_ENABLED, counts, loadState, looksLikeWipe, saveState } from './ap
 import type { AppState } from './types'
 
 type Status = 'loading' | 'ready' | 'error'
-type SaveStatus = 'idle' | 'saving' | 'saved' | 'preview' | 'blocked' | 'error'
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'preview' | 'blocked' | 'error' | 'viewer'
 
 interface Store {
   state: AppState | null
@@ -15,6 +15,9 @@ interface Store {
   reload: () => void
   update: (fn: (s: AppState) => AppState) => void
   discard: () => void
+  /** Viewer accounts can look but not change anything. */
+  setViewOnly: (v: boolean) => void
+  viewOnly: boolean
 }
 
 const Ctx = createContext<Store | null>(null)
@@ -25,6 +28,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState('')
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const [dirty, setDirty] = useState(false)
+  const [viewOnly, setViewOnlyState] = useState(false)
+  const viewOnlyRef = useRef(false)
+  const setViewOnly = useCallback((v: boolean) => { viewOnlyRef.current = v; setViewOnlyState(v); if (v) setSaveStatus('viewer') }, [])
   const loaded = useRef<AppState | null>(null)
   const baseline = useRef<ReturnType<typeof counts> | null>(null)
   const timer = useRef<number | undefined>(undefined)
@@ -38,7 +44,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         baseline.current = counts(s)
         setState(s)
         setDirty(false)
-        setSaveStatus(WRITE_ENABLED ? 'saved' : 'preview')
+        setSaveStatus(viewOnlyRef.current ? 'viewer' : WRITE_ENABLED ? 'saved' : 'preview')
         setStatus('ready')
       })
       .catch((e: unknown) => {
@@ -56,6 +62,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const update = useCallback((fn: (s: AppState) => AppState) => {
     const prev = current.current
     if (!prev) return
+    if (viewOnlyRef.current) { setSaveStatus('viewer'); return }
     const next = fn(prev)
     current.current = next
     setState(next)
@@ -76,7 +83,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <Ctx.Provider value={{ state, status, error, saveStatus, dirty, readOnly: !WRITE_ENABLED, reload, update, discard }}>
+    <Ctx.Provider value={{ state, status, error, saveStatus, dirty, readOnly: !WRITE_ENABLED, reload, update, discard, setViewOnly, viewOnly }}>
       {children}
     </Ctx.Provider>
   )

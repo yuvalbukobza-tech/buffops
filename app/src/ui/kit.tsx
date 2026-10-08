@@ -15,7 +15,9 @@ export const utilColor = (u: number) => (u >= 70 ? C.good : u >= 50 ? C.warn : C
 export function useEntrance(duration = 1300, delay = 250): number {
   const [t, setT] = useState(0)
   useEffect(() => {
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) { setT(1); return }
+    // No animation when the user prefers less motion, or when the tab is in the background
+    // (browsers pause requestAnimationFrame there, which would leave numbers stuck at 0).
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches || document.hidden) { setT(1); return }
     const start = performance.now() + delay
     let raf = 0
     const tick = (now: number) => {
