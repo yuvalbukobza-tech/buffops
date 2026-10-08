@@ -197,7 +197,7 @@ export default function Products() {
         <div className="row" style={{ flexWrap: 'wrap' }}>
           <Seg value={view} onChange={setView} options={[{ value: 'mp', label: 'Products' }, { value: 'raffles', label: 'Raffles' }]} />
           {view === 'mp' && <input className="input" aria-label="Search brand" placeholder="Search brand…" value={q} onChange={(e) => setQ(e.target.value)} style={{ width: 200 }} />}
-          <a className="btn primary" href="#/allocate">{Icon.plus}{view === 'mp' ? 'Add product' : 'Add raffle'}</a>
+          <a className="btn primary" href={view === 'mp' ? '#/allocate' : '#/allocate/raffle'}>{Icon.plus}{view === 'mp' ? 'Add product' : 'Add raffle'}</a>
         </div>
       </div>
 

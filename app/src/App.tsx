@@ -7,6 +7,7 @@ import Countries from './screens/Countries'
 import Dashboard from './screens/Dashboard'
 import Products from './screens/Products'
 import Budget from './screens/Budget'
+import Allocate from './screens/Allocate'
 
 type Route = 'dashboard' | 'products' | 'countries' | 'budget' | 'allocate' | 'fulfillment' | 'admin'
 const TABS: { id: Route; name: string; admin?: boolean; ready: boolean }[] = [
@@ -14,13 +15,14 @@ const TABS: { id: Route; name: string; admin?: boolean; ready: boolean }[] = [
   { id: 'products', name: 'Products', ready: true },
   { id: 'countries', name: 'Countries', ready: true },
   { id: 'budget', name: 'Budget', ready: true },
-  { id: 'allocate', name: 'Allocate', ready: false },
+  { id: 'allocate', name: 'Allocate', ready: true },
   { id: 'fulfillment', name: 'Fulfillment', admin: true, ready: false },
   { id: 'admin', name: 'Admin', admin: true, ready: false },
 ]
 
 function useRoute(): [Route, (r: Route) => void] {
-  const read = () => (location.hash.replace('#/', '') || 'dashboard') as Route
+  // '#/allocate/raffle' → route 'allocate' (the rest is read by the screen)
+  const read = () => (location.hash.replace('#/', '').split('/')[0] || 'dashboard') as Route
   const [r, setR] = useState<Route>(read)
   useEffect(() => {
     const f = () => setR(read())
@@ -138,6 +140,7 @@ function Shell() {
         {current.id === 'countries' && <Countries />}
         {current.id === 'products' && <Products />}
         {current.id === 'budget' && <Budget />}
+        {current.id === 'allocate' && <Allocate />}
         {!current.ready && <Soon name={current.name} />}
       </main>
       </SessionCtx.Provider>
