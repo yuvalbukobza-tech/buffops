@@ -270,9 +270,11 @@ export default function Finance({ prefill, clearPrefill }: { prefill: FinancePre
                     const isOpen = open === x.id
                     const pendingRow = x.status === 'pending'
                     const mail = financeMailText(x)
+                    // Status tint on the row; when opened, only the header line keeps it and the details stay neutral.
+                    const tint = pendingRow ? 'rgba(251,191,36,0.10)' : 'rgba(74,222,128,0.06)'
                     return (
-                      <div key={x.id} style={{ borderTop: '1px solid #17191C', background: pendingRow ? (isOpen ? 'rgba(251,191,36,0.14)' : 'rgba(251,191,36,0.10)') : (isOpen ? 'rgba(74,222,128,0.10)' : 'rgba(74,222,128,0.06)'), boxShadow: `inset 4px 0 0 ${pendingRow ? C.warn : C.good}`, transition: 'background .2s' }}>
-                        <button onClick={() => setOpen(isOpen ? null : x.id)} aria-expanded={isOpen} style={{ display: 'grid', gridTemplateColumns: '52px 1fr 128px 100px', gap: 14, alignItems: 'center', width: '100%', padding: '0 20px', height: 56, border: 'none', background: 'transparent', color: C.text, textAlign: 'left', cursor: 'pointer' }}>
+                      <div key={x.id} style={{ borderTop: '1px solid #17191C', background: isOpen ? '#15171A' : tint, boxShadow: `inset 4px 0 0 ${pendingRow ? C.warn : C.good}`, transition: 'background .2s' }}>
+                        <button onClick={() => setOpen(isOpen ? null : x.id)} aria-expanded={isOpen} style={{ display: 'grid', gridTemplateColumns: '52px 1fr 128px 100px', gap: 14, alignItems: 'center', width: '100%', padding: '0 20px', height: 56, border: 'none', background: isOpen ? tint : 'transparent', color: C.text, textAlign: 'left', cursor: 'pointer' }}>
                           <span className="mono" style={{ fontSize: 12, color: C.faint }}>#{x.id}</span>
                           <span style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}><b style={{ fontSize: 14, fontWeight: 600 }}>{x.vendor} <span style={{ fontWeight: 400, fontSize: 12, color: C.faint }}>· {fmtDate(x.dateRequested)}</span><ReceiptCount tx={x} /></b><span style={{ fontSize: 12, color: C.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{x.note || '—'}</span></span>
                           <span className={`status-badge ${pendingRow ? 'pending' : 'delivered'}`} style={{ justifySelf: 'start' }}>{pendingRow ? Icon.clock : Icon.check}{pendingRow ? 'Pending' : 'Delivered'}</span>
