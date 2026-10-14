@@ -1,5 +1,5 @@
 // Backend access (Google Apps Script). Same endpoint and key as BuffOps v1.
-import { STATE_KEYS, type AppState, type RedashRow } from './types'
+import { STATE_KEYS, type AppState, type Receipt, type RedashRow } from './types'
 
 const LIVE_URL = 'https://script.google.com/macros/s/AKfycbyDJ6nUT5l3Y7R95oi--vp9QM-VZ1urwB64-pMbCPdgyVArgDzQTOiMFvz-ZpWDXADy/exec'
 export const API_URL: string = import.meta.env.VITE_API_URL || LIVE_URL
@@ -79,6 +79,51 @@ export async function sendEmail(to: string[], subject: string, body: string, sen
   if (sender?.email) p.set('senderEmail', sender.email)
   const d = (await getJson(`${API_URL}?${p.toString()}`, 1)) as { ok?: boolean; error?: string }
   if (!d.ok) throw new Error(d.error || 'Email failed')
+}
+
+// ── Receipts on finance requests (files in the script owner's Drive, private) ──
+export const RECEIPT_MAX_BYTES = 10 * 1024 * 1024
+export const RECEIPT_ACCEPT = 'image/png,image/jpeg,image/gif,image/webp,image/heic,image/heif,application/pdf'
+
+const toBase64 = (b: Blob) => new Promise<string>((res, rej) => {
+  const r = new FileReader()
+  r.onload = () => res(String(r.result).split(',')[1] || '')
+  r.onerror = () => rej(new Error('Could not read the file'))
+  r.readAsDataURL(b)
+})
+
+/** Uploads one file; returns the reference to store on the transaction. Disabled in preview mode. */
+export async function uploadReceipt(file: Blob, name: string, txId: number, by: string): Promise<Omit<Receipt, 'uploadedAt' | 'uploadedBy'>> {
+  if (!WRITE_ENABLED) throw new Error('Uploading is disabled in preview mode')
+  const mime = file.type || 'application/octet-stream'
+  const body = JSON.stringify({ name, mime, txId, by, data: await toBase64(file) })
+  const r = await fetch(`${API_URL}?action=uploadReceipt&key=${APP_KEY}`, { method: 'POST', body })
+  const text = await r.text()
+  if (!text.trimStart().startsWith('{')) throw new Error('Unexpected response from Google')
+  const d = JSON.parse(text) as { ok?: boolean; id?: string; name?: string; mime?: string; size?: number; error?: string }
+  // An older backend treats this POST as a state save and rejects it ("Invalid data …") — nothing is written.
+  if (d.error) throw new Error(/Invalid data/.test(d.error) ? 'The backend needs the receipts update (Code-v3) first' : d.error)
+  if (!d.ok || !d.id) throw new Error('Upload failed')
+  return { id: d.id, name: d.name || name, mime: d.mime || mime, size: d.size || file.size }
+}
+
+const receiptCache = new Map<string, Promise<Blob>>()
+
+/** Read-only: downloads a receipt as a Blob (cached for the session). */
+export function fetchReceipt(id: string): Promise<Blob> {
+  let p = receiptCache.get(id)
+  if (!p) {
+    p = (getJson(`${API_URL}?action=receipt&id=${encodeURIComponent(id)}&key=${APP_KEY}`, 2) as Promise<{ data?: string; mime?: string; error?: string }>).then((d) => {
+      if (d.error || !d.data) throw new Error(d.error || 'Receipt not available')
+      const bin = atob(d.data)
+      const bytes = new Uint8Array(bin.length)
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+      return new Blob([bytes], { type: d.mime || 'application/octet-stream' })
+    })
+    p.catch(() => receiptCache.delete(id))
+    receiptCache.set(id, p)
+  }
+  return p
 }
 
 // ── Amazon fulfillment (rows live in the sheet's "Fulfillment" tab, not in the app state) ──

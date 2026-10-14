@@ -68,6 +68,17 @@ export interface Transaction {
   departmentsSplit?: string
   statusChangedAt?: string
   statusChangedBy?: string
+  /** v2: files attached to the request. The files live in Drive; only these references are in the state. */
+  receipts?: Receipt[]
+}
+
+export interface Receipt {
+  id: string
+  name: string
+  mime: string
+  size: number
+  uploadedAt: string
+  uploadedBy?: string
 }
 
 export interface AppUser {

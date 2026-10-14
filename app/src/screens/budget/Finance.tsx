@@ -6,10 +6,12 @@ import { useSession } from '../../lib/session'
 import { useData, useStore } from '../../lib/store'
 import { DEPTS, type Dept, type Transaction } from '../../lib/types'
 import { C, Card, Drawer, Icon, Toast, money, useEntrance } from '../../ui/kit'
+import { ReceiptCount, Receipts } from './Receipts'
 
 export const DEPT_COLOR: Record<Dept, string> = { productDesktop: C.lime, productMobile: C.sky, marketing: C.orange, buffPay: C.violet, dataProject: C.pink }
 const MONTH = (key: string, style: 'short' | 'long' = 'short') => new Date(key + '-15T12:00:00').toLocaleString('en-US', { month: style })
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+const daysSince = (d: string) => Math.max(0, Math.round((Date.parse(today() + 'T12:00:00') - Date.parse(d.slice(0, 10) + 'T12:00:00')) / 86400000))
 const fmtDate = (d: string) => (d ? new Date(d.slice(0, 10) + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '')
 
 export interface FinancePrefill { vendor: string; amount: number; note?: string }
@@ -51,9 +53,10 @@ function EditDrawer({ tx, onClose }: { tx: Transaction; onClose: () => void }) {
 
 export default function Finance({ prefill, clearPrefill }: { prefill: FinancePrefill | null; clearPrefill: () => void }) {
   const data = useData()
-  const { update } = useStore()
+  const { update, viewOnly } = useStore()
   const session = useSession()
   const t = useEntrance()
+  const canEdit = !viewOnly
   const me = data.appUsers.find((u) => u.username === session.username)
 
   const plan = useMemo(() => vendorBudgets(data.allocs, data.products, data.raffles, data.budgetExtras), [data])
@@ -260,12 +263,12 @@ export default function Finance({ prefill, clearPrefill }: { prefill: FinancePre
                     const pendingRow = x.status === 'pending'
                     const mail = financeMailText(x)
                     return (
-                      <div key={x.id} style={{ borderTop: '1px solid #17191C', background: isOpen ? '#15171A' : 'transparent', transition: 'background .2s' }}>
-                        <button onClick={() => setOpen(isOpen ? null : x.id)} aria-expanded={isOpen} style={{ display: 'grid', gridTemplateColumns: '52px 1fr 120px 110px 100px', gap: 14, alignItems: 'center', width: '100%', padding: '0 20px', height: 56, border: 'none', background: 'transparent', color: C.text, textAlign: 'left', cursor: 'pointer' }}>
+                      <div key={x.id} style={{ borderTop: '1px solid #17191C', background: isOpen ? '#15171A' : 'transparent', boxShadow: pendingRow ? 'inset 3px 0 0 #FBBF24' : 'none', transition: 'background .2s' }}>
+                        <button onClick={() => setOpen(isOpen ? null : x.id)} aria-expanded={isOpen} style={{ display: 'grid', gridTemplateColumns: '52px 1fr 120px 128px 100px', gap: 14, alignItems: 'center', width: '100%', padding: '0 20px', height: 56, border: 'none', background: 'transparent', color: C.text, textAlign: 'left', cursor: 'pointer' }}>
                           <span className="mono" style={{ fontSize: 12, color: C.faint }}>#{x.id}</span>
-                          <span style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}><b style={{ fontSize: 14, fontWeight: 600 }}>{x.vendor} <span style={{ fontWeight: 400, fontSize: 12, color: C.faint }}>· {fmtDate(x.dateRequested)}</span></b><span style={{ fontSize: 12, color: C.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{x.note || '—'}</span></span>
+                          <span style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}><b style={{ fontSize: 14, fontWeight: 600 }}>{x.vendor} <span style={{ fontWeight: 400, fontSize: 12, color: C.faint }}>· {fmtDate(x.dateRequested)}</span><ReceiptCount tx={x} /></b><span style={{ fontSize: 12, color: C.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{x.note || '—'}</span></span>
                           <span style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', background: '#17191C' }}>{DEPTS.filter((d) => (Number(x[d]) || 0) > 0).map((d) => <span key={d} style={{ width: `${((Number(x[d]) || 0) / (x.totalAmount || 1)) * 100}%`, background: DEPT_COLOR[d] }} />)}</span>
-                          <span className="pill" style={{ justifySelf: 'start', color: pendingRow ? C.warn : C.good, background: pendingRow ? '#2A1F08' : '#0F2418' }}><span className={pendingRow ? 'a-pulse' : ''} style={{ width: 6, height: 6, borderRadius: '50%', background: 'currentColor' }} />{pendingRow ? 'Pending' : 'Delivered'}</span>
+                          <span className={`status-badge ${pendingRow ? 'pending' : 'delivered'}`} style={{ justifySelf: 'start' }}>{pendingRow ? Icon.clock : Icon.check}{pendingRow ? 'Pending' : 'Delivered'}</span>
                           <span className="mono" style={{ fontSize: 14, fontWeight: 600, textAlign: 'right' }}>{money(x.totalAmount)}</span>
                         </button>
                         {isOpen && (
@@ -274,11 +277,21 @@ export default function Finance({ prefill, clearPrefill }: { prefill: FinancePre
                               {DEPTS.filter((d) => (Number(x[d]) || 0) > 0).map((d) => (
                                 <div key={d} className="row" style={{ gap: 10, fontSize: 13 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: DEPT_COLOR[d] }} /><span style={{ flex: 1, color: '#B4B8BF' }}>{DEPT_LABELS[d]}</span><span className="mono">{money(Number(x[d]), 2)}</span><span className="mono" style={{ fontSize: 12, color: C.faint, width: 40, textAlign: 'right' }}>{Math.round(((Number(x[d]) || 0) / (x.totalAmount || 1)) * 100)}%</span></div>
                               ))}
-                              <div className="caption" style={{ marginTop: 4 }}>Requested {fmtDate(x.dateRequested)} by {x.enteredBy || '—'}{x.lastUpdate ? ` · updated ${fmtDate(x.lastUpdate)}` : ''}{x.statusChangedBy ? ` by ${x.statusChangedBy}` : ''}</div>
+                              <div className="caption" style={{ marginTop: 4 }}>Requested {fmtDate(x.dateRequested)} by {x.enteredBy || '—'}{x.lastUpdate ? ` · updated ${fmtDate(x.lastUpdate)}` : ''}</div>
+                              <Receipts tx={x} by={session.display} canEdit={canEdit} canRemove={canEdit} onToast={setToast} />
                             </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: 190 }}>
-                              <button className="btn primary" onClick={() => setStatus(x, pendingRow ? 'delivered' : 'pending')} style={pendingRow ? { justifyContent: 'center' } : { justifyContent: 'center', background: '#1F2226', borderColor: '#1F2226', color: C.text }}>{pendingRow ? 'Mark delivered' : 'Mark pending'}</button>
-                              <label className="row" style={{ gap: 8, fontSize: 12, color: C.muted, cursor: 'pointer' }}><input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} />Email finance about it</label>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: 260 }}>
+                              <span className="caption">Status</span>
+                              <div className="status-switch" role="radiogroup" aria-label={`Status of request ${x.id}`}>
+                                <button role="radio" aria-checked={pendingRow} className={pendingRow ? 'on-pending' : ''} disabled={pendingRow || !canEdit} onClick={() => setStatus(x, 'pending')}>{Icon.clock}Pending</button>
+                                <button role="radio" aria-checked={!pendingRow} className={pendingRow ? '' : 'on-delivered'} disabled={!pendingRow || !canEdit} onClick={() => setStatus(x, 'delivered')}>{Icon.check}Delivered</button>
+                              </div>
+                              <div style={{ fontSize: 12, color: pendingRow ? C.warn : C.good, minHeight: 16 }}>
+                                {pendingRow
+                                  ? `Waiting ${daysSince(x.dateRequested)} day${daysSince(x.dateRequested) === 1 ? '' : 's'} · click Delivered when the money arrives`
+                                  : `Delivered${x.statusChangedAt ? ` ${fmtDate(x.statusChangedAt)}` : ''}${x.statusChangedBy ? ` by ${x.statusChangedBy}` : ''}`}
+                              </div>
+                              {canEdit && <label className="row" style={{ gap: 8, fontSize: 12, color: C.muted, cursor: 'pointer', marginBottom: 6 }}><input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} />Email finance when the status changes</label>}
                               <a className="btn" href={`mailto:?subject=${encodeURIComponent(mail.subject)}&body=${encodeURIComponent(mail.body)}`} style={{ justifyContent: 'center' }}>Open in mail app</a>
                               <button className="btn" onClick={() => copy(x)} style={{ justifyContent: 'center' }}>Copy email text</button>
                               {session.isAdmin && <div className="row"><button className="btn small" onClick={() => setEditing(x.id)} style={{ flex: 1, justifyContent: 'center' }}>{Icon.edit}Edit</button><button className="btn small" onClick={() => remove(x)} style={{ flex: 1, justifyContent: 'center', color: C.bad, borderColor: '#4A1D1D' }}>Delete</button></div>}
