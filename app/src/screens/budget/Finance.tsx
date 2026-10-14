@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { WRITE_ENABLED, sendEmail } from '../../lib/api'
 import { DAYS_PER_MONTH, VENDORS, vendorBudgets } from '../../lib/calc'
 import { DEPT_LABELS, financeMailText, makeRequest, monthlyTotals, newRequestEmail, splitText, statusEmail, totalOf } from '../../lib/finance'
@@ -92,6 +92,10 @@ export default function Finance({ prefill, clearPrefill }: { prefill: FinancePre
   const [open, setOpen] = useState<number | null>(null)
   const [editing, setEditing] = useState<number | null>(null)
   const [notify, setNotify] = useState(true)
+  // A status change is only applied after an explicit Confirm, and each request can send at most one email at a time.
+  const [confirm, setConfirm] = useState<{ id: number; status: string } | null>(null)
+  const sending = useRef(new Set<number>())
+  const financeRecipients = data.appUsers.filter((u) => u.defaultRecipient && u.email)
   const nowKey = today().slice(0, 7)
   const months = useMemo(() => monthlyTotals(data.transactions, nowKey), [data.transactions, nowKey])
   const recent = months.slice(-5)
@@ -109,13 +113,17 @@ export default function Finance({ prefill, clearPrefill }: { prefill: FinancePre
   const fm = months.find((m) => m.key === focusKey)
 
   const setStatus = (tx: Transaction, status: string) => {
+    setConfirm(null)
+    if (tx.status === status || sending.current.has(tx.id)) return
     update((s) => ({ ...s, transactions: s.transactions.map((x) => (x.id === tx.id ? { ...x, status, lastUpdate: new Date().toISOString(), statusChangedAt: new Date().toISOString(), statusChangedBy: session.display } : x)) }))
-    const rec = data.appUsers.filter((u) => u.defaultRecipient && u.email)
+    const rec = financeRecipients
     if (notify && rec.length) {
       const e = statusEmail(tx, status, session.display, me?.email || '', today())
+      sending.current.add(tx.id)
       sendEmail(rec.map((u) => u.email), e.subject, e.body, { name: session.display, email: me?.email })
         .then(() => setToast(`#${tx.id} marked ${status} · finance notified`))
         .catch(() => setToast(`#${tx.id} marked ${status}${WRITE_ENABLED ? ' · email failed' : ' · email not sent (preview)'}`))
+        .finally(() => sending.current.delete(tx.id))
     } else setToast(`#${tx.id} marked ${status}`)
   }
   const remove = (tx: Transaction) => {
@@ -283,15 +291,29 @@ export default function Finance({ prefill, clearPrefill }: { prefill: FinancePre
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: 260 }}>
                               <span className="caption">Status</span>
                               <div className="status-switch" role="radiogroup" aria-label={`Status of request ${x.id}`}>
-                                <button role="radio" aria-checked={pendingRow} className={pendingRow ? 'on-pending' : ''} disabled={pendingRow || !canEdit} onClick={() => setStatus(x, 'pending')}>{Icon.clock}Pending</button>
-                                <button role="radio" aria-checked={!pendingRow} className={pendingRow ? '' : 'on-delivered'} disabled={!pendingRow || !canEdit} onClick={() => setStatus(x, 'delivered')}>{Icon.check}Delivered</button>
+                                <button role="radio" aria-checked={pendingRow} className={pendingRow ? 'on-pending' : ''} disabled={pendingRow || !canEdit} onClick={() => { setNotify(true); setConfirm({ id: x.id, status: 'pending' }) }}>{Icon.clock}Pending</button>
+                                <button role="radio" aria-checked={!pendingRow} className={pendingRow ? '' : 'on-delivered'} disabled={!pendingRow || !canEdit} onClick={() => { setNotify(true); setConfirm({ id: x.id, status: 'delivered' }) }}>{Icon.check}Delivered</button>
                               </div>
                               <div style={{ fontSize: 12, color: pendingRow ? C.warn : C.good, minHeight: 16 }}>
                                 {pendingRow
                                   ? `Waiting ${daysSince(x.dateRequested)} day${daysSince(x.dateRequested) === 1 ? '' : 's'} · click Delivered when the money arrives`
                                   : `Delivered${x.statusChangedAt ? ` ${fmtDate(x.statusChangedAt)}` : ''}${x.statusChangedBy ? ` by ${x.statusChangedBy}` : ''}`}
                               </div>
-                              {canEdit && <label className="row" style={{ gap: 8, fontSize: 12, color: C.muted, cursor: 'pointer', marginBottom: 6 }}><input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} />Email finance when the status changes</label>}
+                              {confirm?.id === x.id && (
+                                <div className="a-up" role="alertdialog" aria-label="Confirm status change" style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12, borderRadius: 12, background: '#0B0C0E', border: `1px solid ${confirm.status === 'delivered' ? 'rgba(74,222,128,.5)' : 'rgba(251,191,36,.5)'}`, animationDuration: '.25s' }}>
+                                  <b style={{ fontSize: 13, fontWeight: 600 }}>Mark #{x.id} as {confirm.status === 'delivered' ? 'Delivered' : 'Pending'}?</b>
+                                  {financeRecipients.length > 0 && (
+                                    <label className="row" style={{ gap: 8, fontSize: 12, color: C.muted, cursor: 'pointer', alignItems: 'flex-start' }}>
+                                      <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} style={{ marginTop: 2 }} />
+                                      <span>Send one email to {financeRecipients.map((u) => `${u.firstName} ${u.lastName[0] || ''}.`).join(', ')}</span>
+                                    </label>
+                                  )}
+                                  <div className="row" style={{ gap: 8 }}>
+                                    <button className="btn small primary" onClick={() => setStatus(x, confirm.status)} style={{ flex: 1, justifyContent: 'center', ...(confirm.status === 'pending' ? { background: C.warn, borderColor: C.warn } : { background: C.good, borderColor: C.good }) }}>Confirm</button>
+                                    <button className="btn small" onClick={() => setConfirm(null)} style={{ flex: 1, justifyContent: 'center' }}>Cancel</button>
+                                  </div>
+                                </div>
+                              )}
                               <a className="btn" href={`mailto:?subject=${encodeURIComponent(mail.subject)}&body=${encodeURIComponent(mail.body)}`} style={{ justifyContent: 'center' }}>Open in mail app</a>
                               <button className="btn" onClick={() => copy(x)} style={{ justifyContent: 'center' }}>Copy email text</button>
                               {session.isAdmin && <div className="row"><button className="btn small" onClick={() => setEditing(x.id)} style={{ flex: 1, justifyContent: 'center' }}>{Icon.edit}Edit</button><button className="btn small" onClick={() => remove(x)} style={{ flex: 1, justifyContent: 'center', color: C.bad, borderColor: '#4A1D1D' }}>Delete</button></div>}
