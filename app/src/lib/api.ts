@@ -102,7 +102,7 @@ export async function uploadReceipt(file: Blob, name: string, txId: number, by: 
   if (!text.trimStart().startsWith('{')) throw new Error('Unexpected response from Google')
   const d = JSON.parse(text) as { ok?: boolean; id?: string; name?: string; mime?: string; size?: number; error?: string }
   // An older backend treats this POST as a state save and rejects it ("Invalid data …") — nothing is written.
-  if (d.error) throw new Error(/Invalid data/.test(d.error) ? 'The backend needs the receipts update (Code-v3) first' : d.error)
+  if (d.error) throw new Error(/Invalid data/.test(d.error) ? 'the Google backend has not been updated for receipts yet (Code-v3-receipts.gs)' : d.error)
   if (!d.ok || !d.id) throw new Error('Upload failed')
   return { id: d.id, name: d.name || name, mime: d.mime || mime, size: d.size || file.size }
 }

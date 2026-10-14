@@ -72,12 +72,14 @@ export function Receipts({ tx, by, canEdit, canRemove, onToast }: { tx: Transact
   const input = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState<string[]>([])
   const [over, setOver] = useState(false)
+  const [err, setErr] = useState('')
   const [viewing, setViewing] = useState<Receipt | null>(null)
   const list = tx.receipts || []
 
   const add = async (files: FileList | File[]) => {
+    setErr('')
     for (const f of Array.from(files)) {
-      if (!RECEIPT_ACCEPT.split(',').includes(f.type)) { onToast(`${f.name}: only images and PDF files`); continue }
+      if (!RECEIPT_ACCEPT.split(',').includes(f.type)) { setErr(`${f.name}: only images and PDF files can be attached`); continue }
       setBusy((b) => [...b, f.name])
       try {
         const { blob, name } = await shrink(f)
@@ -87,7 +89,7 @@ export function Receipts({ tx, by, canEdit, canRemove, onToast }: { tx: Transact
         update((s) => ({ ...s, transactions: s.transactions.map((x) => (x.id === tx.id ? { ...x, receipts: [...(x.receipts || []), rec], lastUpdate: rec.uploadedAt } : x)) }))
         onToast(`Receipt attached to #${tx.id}`)
       } catch (e) {
-        onToast(`${f.name}: ${(e as Error).message}`)
+        setErr(`${f.name} was not uploaded: ${(e as Error).message}`)
       } finally {
         setBusy((b) => b.filter((n) => n !== f.name))
       }
@@ -122,6 +124,7 @@ export function Receipts({ tx, by, canEdit, canRemove, onToast }: { tx: Transact
         )}
         {!canEdit && !list.length && <span style={{ fontSize: 12, color: C.faint }}>No receipts attached.</span>}
       </div>
+      {err && <div role="alert" className="row" style={{ gap: 8, fontSize: 12, color: C.bad, alignItems: 'flex-start' }}>{Icon.warn}<span style={{ flex: 1 }}>{err}</span><button onClick={() => setErr('')} aria-label="Dismiss" style={{ border: 'none', background: 'none', color: C.muted, cursor: 'pointer', padding: 0 }}>{Icon.close}</button></div>}
       <input ref={input} type="file" accept={RECEIPT_ACCEPT} multiple hidden onChange={(e) => { if (e.target.files?.length) add(e.target.files); e.target.value = '' }} />
       {viewing && <Viewer r={viewing} onClose={() => setViewing(null)} />}
     </div>
