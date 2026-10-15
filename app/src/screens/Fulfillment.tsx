@@ -125,6 +125,7 @@ export default function Fulfillment() {
                     return (
                       <button key={r.key} className="a-up" onClick={() => { setSel(r.key); setOrderNo('') }} style={{ animationDelay: `${560 + (ci * 2 + i) * 80}ms`, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6, width: '100%', padding: 12, borderRadius: 10, color: C.text, textAlign: 'left', cursor: 'pointer', transition: 'all .2s', background: sel === r.key ? '#1A1C20' : '#17191C', border: `1px solid ${warn ? '#3D2A0A' : sel === r.key ? '#3A3D44' : C.line}` }}>
                         <span className="between" style={{ width: '100%', alignItems: 'center' }}><b style={{ fontSize: 13 }}>{r.name}</b><span className="caption">{r.country}</span></span>
+                        {r.email && <span className="mono" title={r.email} style={{ fontSize: 11, color: C.muted, maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: -3 }}>{r.email}</span>}
                         <span style={{ fontSize: 12, color: '#B4B8BF', lineHeight: 1.35 }}>{r.product}</span>
                         {warn && <span className="row" style={{ gap: 6, fontSize: 11, fontWeight: 500, color: C.warn }}><span className="a-pulse" style={{ width: 6, height: 6, borderRadius: '50%', background: C.warn }} />{a!.short}</span>}
                         <span style={{ fontSize: 11, color: C.faint }}>{r.status === 'done' && toDate(r.emailedAt) && toDate(r.doneAt) ? `Delivered ${fmt(r.doneAt)} · ${days(toDate(r.emailedAt)!, toDate(r.doneAt)!)} days` : `Bought ${fmt(r.purchaseDate)}`}</span>
@@ -177,7 +178,11 @@ export default function Fulfillment() {
       {cur && (
         <Drawer open onClose={() => setSel(null)} title={`Order ${cur.name}`}>
           <div className="between" style={{ alignItems: 'flex-start' }}>
-            <div><div className="caption">Order · {cur.country}{cur.amount ? ` · ${Number(cur.amount).toLocaleString()} Buffs` : ''}</div><div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{cur.name}</div><div style={{ fontSize: 13, color: '#B4B8BF', marginTop: 4 }}>{cur.product}</div></div>
+            <div><div className="caption">Order · {cur.country}{cur.amount ? ` · ${Number(cur.amount).toLocaleString()} Buffs` : ''}</div><div style={{ fontSize: 22, fontWeight: 700, marginTop: 4 }}>{cur.name}</div><div style={{ fontSize: 13, color: '#B4B8BF', marginTop: 4 }}>{cur.product}</div>
+              {cur.email && <div className="row" style={{ gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                <a className="mono" href={`mailto:${cur.email}`} style={{ fontSize: 13, color: C.sky, wordBreak: 'break-all' }}>{cur.email}</a>
+                <button className="btn small" onClick={() => navigator.clipboard?.writeText(cur.email).then(() => setToast('Email copied'))} style={{ height: 26, padding: '0 10px', fontSize: 11 }}>Copy</button>
+              </div>}</div>
             <button className="icon-btn" aria-label="Close" onClick={() => setSel(null)}>{Icon.close}</button>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
