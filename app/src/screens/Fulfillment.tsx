@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { WRITE_ENABLED, fulfillAction, fulfillFormLink, fulfillList, fulfillPull, type FulfillRow } from '../lib/api'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { PullCancelled, WRITE_ENABLED, fulfillAction, fulfillFormLink, fulfillList, fulfillPull, fulfillPullCancel, type FulfillRow, type PullControl } from '../lib/api'
 import { C, Card, Drawer, Icon, Kpi, Toast, useEntrance } from '../ui/kit'
 
 const DAY = 86400000
@@ -47,6 +47,7 @@ export default function Fulfillment() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState('')
   const [pullState, setPullState] = useState('')
+  const pullCtl = useRef<PullControl | null>(null)
   const [sel, setSel] = useState<string | null>(null)
   const [showTests, setShowTests] = useState(false)
   const [orderNo, setOrderNo] = useState('')
@@ -62,9 +63,20 @@ export default function Fulfillment() {
   const pull = () => {
     setBusy('pull'); setPullState('starting')
     const before = new Set((rows || []).map((r) => r.key))
-    fulfillPull((state, sec) => setPullState(`${state === 'running' ? 'Redash running' : 'In Redash queue'} · ${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`))
+    const ctl: PullControl = { cancelled: false }
+    pullCtl.current = ctl
+    fulfillPull((state, sec) => setPullState(`${state === 'running' ? 'Redash running' : 'In Redash queue'} · ${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`), ctl)
       .then((r) => { setRows(r); const n = r.filter((x) => !before.has(x.key)).length; setToast(n ? `${n} new customer${n === 1 ? '' : 's'} from Redash` : 'Pulled from Redash · no new customers') })
-      .catch((e: Error) => setToast(e.message)).finally(() => { setBusy(''); setPullState('') })
+      .catch((e: Error) => { if (!(e instanceof PullCancelled)) setToast(e.message) })
+      .finally(() => { if (pullCtl.current === ctl) { setBusy(''); setPullState(''); pullCtl.current = null } })
+  }
+  const cancelPull = () => {
+    const ctl = pullCtl.current
+    if (!ctl || !window.confirm('Stop this pull? The query will also be cancelled in Redash.')) return
+    ctl.cancelled = true
+    pullCtl.current = null
+    setBusy(''); setPullState('')
+    fulfillPullCancel(ctl.job).then(() => setToast('Pull cancelled — the query was stopped in Redash')).catch((e: Error) => setToast(`Pull stopped here · ${e.message}`))
   }
   const act = (r: FulfillRow, action: 'fulfillEmail1' | 'fulfillEmail2' | 'fulfillSetStatus', params: Record<string, string | undefined>, ok: string) => {
     setBusy(r.key)
@@ -101,6 +113,7 @@ export default function Fulfillment() {
         <div className="row" style={{ flexWrap: 'wrap' }}>
           {tests > 0 && <label className="row caption" style={{ gap: 6, cursor: 'pointer' }}><input type="checkbox" checked={showTests} onChange={(e) => setShowTests(e.target.checked)} />Show test rows</label>}
           <button className="icon-btn" aria-label="Reload from sheet" onClick={load}>{Icon.refresh}</button>
+          {busy === 'pull' && <button className="btn" onClick={cancelPull} style={{ color: C.bad, borderColor: '#4A1D1D' }}>{Icon.close}Cancel pull</button>}
           <button className="btn" onClick={pull} disabled={busy === 'pull'} title={WRITE_ENABLED ? '' : 'Disabled in preview: it writes new rows to the sheet'}>{Icon.refresh}{busy === 'pull' ? (pullState === 'starting' ? 'Starting…' : pullState) : 'Pull new from Redash'}</button>
         </div>
       </div>

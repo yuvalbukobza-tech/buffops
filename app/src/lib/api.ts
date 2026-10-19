@@ -151,19 +151,35 @@ type PullReply = { rows?: FulfillRow[]; error?: string; pending?: boolean; job?:
  * The Redash query can run for minutes, so the backend starts it and we poll the job
  * (onProgress gets 'queued' | 'running' and the seconds waited) until the rows are in.
  */
-export async function fulfillPull(onProgress?: (state: string, seconds: number) => void): Promise<FulfillRow[]> {
+export class PullCancelled extends Error { constructor() { super('Pull cancelled') } }
+
+/** Lets the screen cancel a running pull; `job` is the Redash job once it is known. */
+export interface PullControl { cancelled: boolean; job?: string }
+
+export async function fulfillPull(onProgress?: (state: string, seconds: number) => void, ctl: PullControl = { cancelled: false }): Promise<FulfillRow[]> {
   if (!WRITE_ENABLED) throw new Error('Pulling from Redash writes to the sheet — disabled in preview mode')
   const t0 = Date.now()
   let d = (await getJson(`${API_URL}?action=fulfillPull&key=${APP_KEY}`, 1)) as PullReply
   while (d.pending && d.job) {
+    ctl.job = d.job
+    if (ctl.cancelled) throw new PullCancelled()
     const waited = Math.round((Date.now() - t0) / 1000)
     onProgress?.(d.state || 'queued', waited)
     if (waited > 20 * 60) throw new Error('Redash has been running the query for 20 minutes — try again later')
     await new Promise((r) => setTimeout(r, 5000))
+    if (ctl.cancelled) throw new PullCancelled()
     d = (await getJson(`${API_URL}?action=fulfillPullJob&job=${encodeURIComponent(d.job)}&key=${APP_KEY}`, 3)) as PullReply
   }
+  if (ctl.cancelled) throw new PullCancelled()
   if (d.error) throw new Error(d.error === 'Timeout' ? 'Redash did not finish in time (the Google backend needs the pull update, Code-v4-pull.gs)' : d.error)
   return d.rows || []
+}
+
+/** Stops the running pull in Redash itself, so the query stops loading the database. */
+export async function fulfillPullCancel(job?: string): Promise<void> {
+  if (!WRITE_ENABLED) throw new Error('Disabled in preview mode')
+  const d = (await getJson(`${API_URL}?action=fulfillPullCancel&job=${encodeURIComponent(job || '')}&key=${APP_KEY}`, 2)) as { ok?: boolean; error?: string }
+  if (d.error) throw new Error(d.error)
 }
 
 /** Writes / emails customers: fulfillEmail1, fulfillEmail2, fulfillSetStatus. Disabled in preview mode. */
