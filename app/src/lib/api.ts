@@ -65,10 +65,34 @@ export async function saveState(s: AppState): Promise<void> {
   await fetch(`${API_URL}?key=${APP_KEY}`, { method: 'POST', mode: 'no-cors', body: JSON.stringify(body) })
 }
 
-export async function fetchRedash(from: string, to: string): Promise<RedashRow[]> {
-  const d = (await getJson(`${API_URL}?action=redash&from=${from}&to=${to}&key=${APP_KEY}`, 2)) as { rows?: RedashRow[]; error?: string }
+/**
+ * Sales query (Redash 2672). The backend starts it and returns at once; we poll the job
+ * (onProgress gets 'queued' | 'running' and seconds waited). Setting ctl.cancelled stops polling;
+ * redashCancel(ctl.job) also stops the run inside Redash.
+ */
+export async function fetchRedash(from: string, to: string, ctl: PullControl = { cancelled: false }, onProgress?: (state: string, seconds: number) => void): Promise<RedashRow[]> {
+  type Reply = { rows?: RedashRow[]; error?: string; pending?: boolean; job?: string; state?: string }
+  const t0 = Date.now()
+  let d = (await getJson(`${API_URL}?action=redash&async=1&from=${from}&to=${to}&key=${APP_KEY}`, 2)) as Reply
+  while (d.pending && d.job) {
+    ctl.job = d.job
+    if (ctl.cancelled) throw new PullCancelled()
+    const waited = Math.round((Date.now() - t0) / 1000)
+    onProgress?.(d.state || 'queued', waited)
+    if (waited > 15 * 60) throw new Error('Redash has been running for 15 minutes — try again later')
+    await new Promise((r) => setTimeout(r, 4000))
+    if (ctl.cancelled) throw new PullCancelled()
+    d = (await getJson(`${API_URL}?action=redashJob&job=${encodeURIComponent(d.job)}&key=${APP_KEY}`, 3)) as Reply
+  }
+  if (ctl.cancelled) throw new PullCancelled()
   if (d.error) throw new Error(d.error)
   return d.rows || []
+}
+
+/** Stops a BuffOps run inside Redash (sales or Fulfillment) so it stops loading the database. */
+export async function redashCancel(job: string): Promise<void> {
+  const d = (await getJson(`${API_URL}?action=redashCancel&job=${encodeURIComponent(job)}&key=${APP_KEY}`, 2)) as { ok?: boolean; error?: string }
+  if (d.error) throw new Error(d.error)
 }
 
 /** Sends a plain-text email through the backend (Gmail of the script owner). Disabled in preview mode. */

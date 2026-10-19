@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { DAYS_PER_MONTH, calcRealDaily, matchProduct, priceFromName, vendorOf } from '../../lib/calc'
-import { useRedash, type Range } from '../../lib/redash'
+import { REDASH_CANCELLED, useRedash, type Range } from '../../lib/redash'
 import { useData } from '../../lib/store'
 import type { AllocRow } from '../../lib/types'
 import { C, Card, Icon, Seg, money, useEntrance } from '../../ui/kit'
@@ -50,12 +50,13 @@ export default function PlanVsActual() {
       <div className="between a-up" style={{ animationDelay: '80ms', alignItems: 'center' }}>
         <div className="caption">{red.from} → {red.to} · planned uses each product's expected utilization · real spend from Redash</div>
         <div className="row">
-          {red.loading && <span className="caption row" style={{ gap: 8 }}><span style={{ width: 14, height: 14, border: `2px solid ${C.line2}`, borderTopColor: C.lime, borderRadius: '50%', animation: 'bo-spin .8s linear infinite' }} />Fetching Redash…</span>}
+          {red.loading && <span className="caption row" style={{ gap: 8 }}><span style={{ width: 14, height: 14, border: `2px solid ${C.line2}`, borderTopColor: C.lime, borderRadius: '50%', animation: 'bo-spin .8s linear infinite' }} />Fetching Redash…<button onClick={red.cancel} style={{ border: '1px solid #4A1D1D', background: 'transparent', color: C.bad, borderRadius: 8, height: 26, padding: '0 10px', fontSize: 12, cursor: 'pointer' }}>Cancel</button></span>}
           <button className="icon-btn" aria-label="Refresh real data" onClick={red.refresh}>{Icon.refresh}</button>
           <Seg value={range} onChange={setRange} options={[{ value: '7', label: '7 days' }, { value: '17', label: '17 days' }, { value: '30', label: '30 days' }]} />
         </div>
       </div>
-      {red.error && <div className="card" style={{ padding: '12px 16px', borderColor: '#4A1D1D', color: C.bad, fontSize: 13 }}>Redash didn't answer: {red.error}</div>}
+      {red.error === REDASH_CANCELLED ? <div className="card" style={{ padding: '12px 16px', color: C.muted, fontSize: 13 }}>Redash query cancelled — actual spend is not shown. <button className="btn small" onClick={red.refresh}>Run again</button></div>
+        : red.error && <div className="card" style={{ padding: '12px 16px', borderColor: '#4A1D1D', color: C.bad, fontSize: 13 }}>Redash didn't answer: {red.error}</div>}
 
       <Card delay={160}>
         <div className="between" style={{ alignItems: 'flex-start' }}>

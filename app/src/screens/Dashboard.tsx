@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useRedash, type Range } from '../lib/redash'
+import { REDASH_CANCELLED, useRedash, type Range } from '../lib/redash'
 import { COUNTRIES, DAYS_PER_MONTH, priceFromName, summarizeCountry, vendorBudgets } from '../lib/calc'
 import { useData } from '../lib/store'
 import { DEPTS, type Transaction } from '../lib/types'
@@ -98,12 +98,13 @@ export default function Dashboard({ go }: { go: (r: 'countries') => void }) {
           <div className="sub">Real spend from Redash vs. your plan · {red.from} → {red.to} ({red.days} days)</div>
         </div>
         <div className="row">
-          {red.loading && <span className="caption row" style={{ gap: 8 }}><span style={{ width: 14, height: 14, border: `2px solid ${C.line2}`, borderTopColor: C.lime, borderRadius: '50%', animation: 'bo-spin .8s linear infinite' }} />Fetching Redash… about a minute</span>}
+          {red.loading && <span className="caption row" style={{ gap: 8 }}><span style={{ width: 14, height: 14, border: `2px solid ${C.line2}`, borderTopColor: C.lime, borderRadius: '50%', animation: 'bo-spin .8s linear infinite' }} />{red.progress || 'Fetching Redash…'}<button onClick={red.cancel} style={{ border: '1px solid #4A1D1D', background: 'transparent', color: C.bad, borderRadius: 8, height: 26, padding: '0 10px', fontSize: 12, cursor: 'pointer' }}>Cancel</button></span>}
           <button className="icon-btn" aria-label="Refresh real data" onClick={red.refresh} disabled={red.loading}>{Icon.refresh}</button>
           <Seg value={range} onChange={setRange} options={[{ value: '7', label: '7 days' }, { value: '17', label: '17 days' }, { value: '30', label: '30 days' }]} />
         </div>
       </div>
-      {red.error && <div className="card" style={{ padding: '12px 16px', borderColor: '#4A1D1D', color: C.bad, fontSize: 13 }}>Redash didn't answer: {red.error}. Plan numbers below are still correct. <button className="btn small" onClick={red.refresh}>Try again</button></div>}
+      {red.error === REDASH_CANCELLED ? <div className="card" style={{ padding: '12px 16px', color: C.muted, fontSize: 13 }}>Redash query cancelled — real spend is not shown. Plan numbers below are still correct. <button className="btn small" onClick={red.refresh}>Run again</button></div>
+        : red.error && <div className="card" style={{ padding: '12px 16px', borderColor: '#4A1D1D', color: C.bad, fontSize: 13 }}>Redash didn't answer: {red.error}. Plan numbers below are still correct. <button className="btn small" onClick={red.refresh}>Try again</button></div>}
 
       <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
         <Kpi label="Real spend" value={red.rows ? money(totalActual * t) : '—'} sub={red.rows ? `${money(totalActual / red.days, 2)} / day · ${[...actualBy.byCountry.keys()].filter((k) => k !== '??').length} countries` : 'waiting for Redash'} color={C.lime} accent delay={120} />
