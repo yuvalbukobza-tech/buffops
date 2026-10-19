@@ -46,6 +46,7 @@ export default function Fulfillment() {
   const [state, setState] = useState<'loading' | 'idle' | 'error'>('loading')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState('')
+  const [pullState, setPullState] = useState('')
   const [sel, setSel] = useState<string | null>(null)
   const [showTests, setShowTests] = useState(false)
   const [orderNo, setOrderNo] = useState('')
@@ -59,8 +60,11 @@ export default function Fulfillment() {
   useEffect(() => { load() }, [load])
 
   const pull = () => {
-    setBusy('pull')
-    fulfillPull().then((r) => { setRows(r); setToast('Pulled new customers from Redash') }).catch((e: Error) => setToast(e.message)).finally(() => setBusy(''))
+    setBusy('pull'); setPullState('starting')
+    const before = new Set((rows || []).map((r) => r.key))
+    fulfillPull((state, sec) => setPullState(`${state === 'running' ? 'Redash running' : 'In Redash queue'} · ${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`))
+      .then((r) => { setRows(r); const n = r.filter((x) => !before.has(x.key)).length; setToast(n ? `${n} new customer${n === 1 ? '' : 's'} from Redash` : 'Pulled from Redash · no new customers') })
+      .catch((e: Error) => setToast(e.message)).finally(() => { setBusy(''); setPullState('') })
   }
   const act = (r: FulfillRow, action: 'fulfillEmail1' | 'fulfillEmail2' | 'fulfillSetStatus', params: Record<string, string | undefined>, ok: string) => {
     setBusy(r.key)
@@ -97,7 +101,7 @@ export default function Fulfillment() {
         <div className="row" style={{ flexWrap: 'wrap' }}>
           {tests > 0 && <label className="row caption" style={{ gap: 6, cursor: 'pointer' }}><input type="checkbox" checked={showTests} onChange={(e) => setShowTests(e.target.checked)} />Show test rows</label>}
           <button className="icon-btn" aria-label="Reload from sheet" onClick={load}>{Icon.refresh}</button>
-          <button className="btn" onClick={pull} disabled={busy === 'pull'} title={WRITE_ENABLED ? '' : 'Disabled in preview: it writes new rows to the sheet'}>{Icon.refresh}{busy === 'pull' ? 'Pulling… (slow)' : 'Pull new from Redash'}</button>
+          <button className="btn" onClick={pull} disabled={busy === 'pull'} title={WRITE_ENABLED ? '' : 'Disabled in preview: it writes new rows to the sheet'}>{Icon.refresh}{busy === 'pull' ? (pullState === 'starting' ? 'Starting…' : pullState) : 'Pull new from Redash'}</button>
         </div>
       </div>
       {!WRITE_ENABLED && <div className="caption" style={{ color: C.warn }}>Preview: you can browse and copy, but emails to customers and status changes are disabled.</div>}
