@@ -1,18 +1,25 @@
-// Marketplace budget utilization: the half-month budget (entered by hand) against what users really bought.
-// Real purchases come from the Inventory DB through backend v8 (?action=mpq); the math lives in lib/utilization.ts.
+// Rewards budget utilization: the budget (standing monthly, or per half-month) against every reward given —
+// marketplace purchases plus Buff Pass / raffle prizes from internal stock.
+// Data comes from the Inventory DB through the backend (?action=mpq); the math lives in lib/utilization.ts.
 import { useMemo, useState } from 'react'
 import { calcDailyQty, calcPriceUSD, calcRealDaily } from '../../lib/calc'
-import { MP_CANCELLED, MP_OUTDATED, useBackendVersion, useMpDaily, useMpStock } from '../../lib/mpdata'
+import { MP_CANCELLED, MP_OUTDATED, useBackendVersion, useMpDaily, useMpStock, useRaffles } from '../../lib/mpdata'
 import { iso } from '../../lib/redash'
 import { useSession } from '../../lib/session'
 import { useData, useStore } from '../../lib/store'
+import type { BudgetPeriod } from '../../lib/types'
 import {
-  addDays, budgetOf, buckets, dayList, dailyBudget, makePricer, periodLabel, periodOf, periodRange, productLines,
-  shiftPeriod, spendByDay, spendBySource, summarizePeriod, upsertBudget, type Flag, type Grain,
+  KINDS, KIND_LABEL, addDays, budgetInfo, buckets, dayList, dailyBudget, kindTotals, makePricer, monthLabel, monthlyId, periodLabel, periodOf,
+  periodRange, prizeLines, productLines, shiftPeriod, spendByDay, spendBySource, summarizePeriod, upsertBudget,
+  type BudgetInfo, type Flag, type Grain, type Kind, type PrizeLine,
 } from '../../lib/utilization'
+import { rafflePrizeNames, raffleStats } from '../../lib/recommend'
 import { C, Card, Icon, Kpi, Seg, Toast, UtilBar, money } from '../../ui/kit'
+import Leftover from './Leftover'
 
 const NEED_VERSION = 8
+/** v9 adds Buff Pass / raffle prizes (internal stock) to the daily query. */
+const PRIZES_VERSION = 9
 const firstOfPrevMonth = (day: string) => {
   const y = +day.slice(0, 4), m = +day.slice(5, 7)
   return m === 1 ? `${y - 1}-12-01` : `${y}-${String(m - 1).padStart(2, '0')}-01`
@@ -43,13 +50,22 @@ export default function Utilization() {
   const from = [firstOfPrevMonth(today), `${range.start.slice(0, 7)}-01`].sort()[0]
   const to = addDays(today, 1)
   const backendOk = version === null ? null : version >= NEED_VERSION
+  const hasPrizes = (version || 0) >= PRIZES_VERSION
   const daily = useMpDaily(from, to, backendOk === true)
   const stock = useMpStock(backendOk === true)
+  const raffleQ = useRaffles(hasPrizes)
+  const raffles = useMemo(() => (raffleQ.rows ? raffleStats(raffleQ.rows, today) : null), [raffleQ.rows, today])
 
   const price = useMemo(() => makePricer(data.allocs, data.products), [data.allocs, data.products])
-  const byDay = useMemo(() => spendByDay(daily.rows || [], price), [daily.rows, price])
+  // Gift cards named like a raffle's prize count as raffle spend.
+  const prizeSet = useMemo(() => rafflePrizeNames(raffleQ.rows || []), [raffleQ.rows])
+  const byDay = useMemo(() => spendByDay(daily.rows || [], price, prizeSet), [daily.rows, price, prizeSet])
   const periods = data.budgetPeriods
+  const info = budgetInfo(periods, pid)
   const sum = summarizePeriod(pid, byDay, periods, today)
+  const shownTo = range.end < today ? range.end : today
+  const totals = useMemo(() => kindTotals(byDay, range.start, shownTo), [byDay, range.start, shownTo])
+  const prizes = useMemo(() => prizeLines(daily.rows || [], range.start, shownTo, price, prizeSet), [daily.rows, range.start, shownTo, price, prizeSet])
 
   // What the current allocations open per day, in money (before and after expected utilization).
   const plan = useMemo(() => {
@@ -78,10 +94,13 @@ export default function Utilization() {
   const table = useMemo(() => buckets(grain, from, today, today, byDay, periods).reverse(), [grain, from, today, byDay, periods])
 
   const canEdit = !store.viewOnly && backendOk === true
-  const saveBudget = (amount: number) => {
-    store.update((s) => ({ ...s, budgetPeriods: upsertBudget(s.budgetPeriods, pid, amount, session.username) }))
-    setToast(amount > 0 ? `Budget for ${periodLabel(pid)} set to ${money(amount)}` : `Budget for ${periodLabel(pid)} removed`)
+  const saveEntry = (id: string, amount: number, what: string) => {
+    store.update((s) => ({ ...s, budgetPeriods: upsertBudget(s.budgetPeriods, id, amount, session.username) }))
+    setToast(amount > 0 ? `${what} set to ${money(amount)}` : `${what} removed`)
   }
+  const ym = pid.slice(0, 7)
+  const saveMonthly = (n: number) => saveEntry(monthlyId(ym), n, `Monthly budget from ${monthLabel(ym)}`)
+  const savePeriod = (n: number) => saveEntry(pid, n, `Budget for ${periodLabel(pid)}`)
 
   const loading = daily.loading || stock.loading
   const err = daily.error || stock.error
@@ -107,17 +126,17 @@ export default function Utilization() {
 
       {backendOk === false || err === MP_OUTDATED ? (
         <div className="card a-up" style={{ padding: '12px 16px', borderColor: '#4A3A12', color: C.warn, fontSize: 13, display: 'flex', gap: 10, alignItems: 'center' }}>
-          {Icon.warn}<span>The Google backend needs the v8 update (Code-v8-mp-utilization.gs) before real purchases load and budgets can be saved.</span>
+          {Icon.warn}<span>The Google backend needs an update (latest: Code-v9-all-rewards.gs) before real purchases load and budgets can be saved.</span>
         </div>
       ) : err === MP_CANCELLED ? (
         <div className="card" style={{ padding: '12px 16px', color: C.muted, fontSize: 13 }}>Query cancelled — real spend is not shown. <button className="btn small" onClick={() => { daily.refresh(); stock.refresh() }}>Run again</button></div>
       ) : err ? <div className="card" style={{ padding: '12px 16px', borderColor: '#4A1D1D', color: C.bad, fontSize: 13 }}>Redash didn't answer: {err}</div> : null}
 
-      <BudgetBox key={pid} pid={pid} current={budgetOf(periods, pid)} meta={periods.find((p) => p.id === pid)} canEdit={canEdit} onSave={saveBudget}
+      <BudgetBox key={pid + (info.entry ? '+' : '')} pid={pid} info={info} canEdit={canEdit} onSaveMonthly={saveMonthly} onSavePeriod={savePeriod}
         planOpened={plan.opened * range.days} planExpected={plan.expected * range.days} />
 
       <div className="grid a-up" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', animationDelay: '140ms' }}>
-        <Kpi label="Spent" value={daily.rows ? money(sum.spent) : '—'} sub={sum.future ? 'Not started' : !daily.rows ? 'Waiting for purchases' : sum.current ? `${money(sum.today)} today so far` : `${range.days} days`} accent delay={140} />
+        <Kpi label={hasPrizes ? 'Spent · all rewards' : 'Spent · marketplace'} value={daily.rows ? money(sum.spent) : '—'} sub={sum.future ? 'Not started' : !daily.rows ? 'Waiting for purchases' : sum.current ? `${money(sum.today)} today so far` : `${range.days} days`} accent delay={140} />
         <Kpi label="Utilization" value={sum.utilization !== null && daily.rows ? `${Math.round(sum.utilization * 100)}%` : '—'} sub={sum.budget ? `of ${money(sum.budget)}` : 'Set a budget to see this'} color={sum.utilization !== null && sum.utilization > 1 ? C.bad : C.text} delay={180} />
         <Kpi label="Pace" value={sum.pace !== null && daily.rows ? `${Math.round(sum.pace * 100)}%` : '—'} color={paceCol(sum.pace)}
           sub={!daily.rows ? '' : !sum.current && sum.expectedByNow !== null ? 'Whole period, against the budget' : sum.expectedByNow !== null && sum.completeDays ? `${money(sum.spentComplete)} vs ${money(sum.expectedByNow)} expected by now` : 'Needs a budget and one full day'} delay={220} />
@@ -127,6 +146,9 @@ export default function Utilization() {
       </div>
 
       {!sum.future && daily.rows && <BurnUp pid={pid} today={today} byDay={byDay} budget={sum.budget} forecast={sum.current ? sum.forecast : null} />}
+      {!sum.future && daily.rows && <RewardsCard totals={totals} prizes={prizes} budget={sum.budget} hasPrizes={hasPrizes} />}
+      {sum.current && daily.rows && <Leftover sum={sum} today={today} lines={lines} raffles={raffles}
+        rafflesNote={!hasPrizes ? 'Raffle suggestions load after the backend v9 update.' : raffleQ.loading ? 'Loading raffles…' : raffleQ.error ? `Raffles didn't load: ${raffleQ.error}` : 'No raffle data.'} />}
 
       <Card pad={false} delay={320} style={{ overflowX: 'auto' }}>
         <div className="between" style={{ padding: '16px 18px 12px', alignItems: 'center' }}>
@@ -152,7 +174,7 @@ export default function Utilization() {
       {!sum.future && (
         <Card pad={false} delay={380} style={{ overflowX: 'auto' }}>
           <div style={{ padding: '16px 18px 12px' }}>
-            <h2 className="h2">By product · {periodLabel(pid)}</h2>
+            <h2 className="h2">Marketplace by product · {periodLabel(pid)}</h2>
             <div className="caption" style={{ marginTop: 4 }}>
               {sum.current ? `${prodDays} complete day${prodDays === 1 ? '' : 's'} (today is left out)` : `${range.days} days`} · plan/day = units opened by active marketplace allocations in BuffOps, all countries{sum.current ? ' · "Sold out" is live from the marketplace' : ''}
             </div>
@@ -198,44 +220,126 @@ function BudgetBar({ value }: { value: number }) {
 }
 const PGRID = '2.4fr 1fr 0.7fr 0.7fr 0.9fr 1.3fr 0.9fr 0.6fr'
 
-function BudgetBox({ pid, current, meta, canEdit, onSave, planOpened, planExpected }: {
-  pid: string; current: number | null; meta?: { updatedAt?: string; updatedBy?: string }; canEdit: boolean
-  onSave: (n: number) => void; planOpened: number; planExpected: number
+const parseUSD = (s: string) => (s.trim() === '' ? 0 : Number(s.replace(/[$,\s]/g, '')))
+const okUSD = (n: number) => Number.isFinite(n) && n >= 0
+
+/** One "$ [amount] [Save]" form. Empty + save = remove. */
+function MoneyForm({ label, value, canEdit, onSave, cta }: { label: string; value: number | null; canEdit: boolean; onSave: (n: number) => void; cta: string }) {
+  const [val, setVal] = useState(value ? String(value) : '')
+  const n = parseUSD(val)
+  const ok = okUSD(n)
+  const changed = n !== (value || 0)
+  return (
+    <form className="row" style={{ gap: 8 }} onSubmit={(e) => { e.preventDefault(); if (ok && changed) onSave(n) }}>
+      <span style={{ position: 'relative' }}>
+        <span style={{ position: 'absolute', left: 12, top: 11, color: C.faint, fontSize: 14 }}>$</span>
+        <input className="input mono" inputMode="decimal" aria-label={label} disabled={!canEdit} value={val} onChange={(e) => setVal(e.target.value)} placeholder="0" style={{ width: 150, paddingLeft: 24, borderColor: ok ? undefined : C.bad }} />
+      </span>
+      <button className="btn primary small" type="submit" disabled={!canEdit || !ok || !changed} style={{ height: 40 }}>{cta}</button>
+    </form>
+  )
+}
+
+function BudgetBox({ pid, info, canEdit, onSaveMonthly, onSavePeriod, planOpened, planExpected }: {
+  pid: string; info: BudgetInfo; canEdit: boolean
+  onSaveMonthly: (n: number) => void; onSavePeriod: (n: number) => void; planOpened: number; planExpected: number
 }) {
-  const [val, setVal] = useState(current ? String(current) : '')
-  const n = Number(val.replace(/[$,\s]/g, ''))
-  const valid = val.trim() === '' || (Number.isFinite(n) && n >= 0)
-  const changed = (val.trim() === '' ? 0 : n) !== (current || 0)
-  const ref = current || (valid && n > 0 ? n : 0)
+  const [override, setOverride] = useState(info.from === 'period')
+  const ym = pid.slice(0, 7)
+  const m = info.monthly
+  const stamp = (p?: BudgetPeriod) => (p?.updatedAt ? ` · set by ${p.updatedBy || 'someone'} ${p.updatedAt.slice(0, 10)}` : '')
+  const budget = info.amount || 0
   return (
     <Card delay={110}>
-      <div className="between" style={{ alignItems: 'center' }}>
-        <div>
-          <div className="label">Marketplace budget · {periodLabel(pid)}</div>
-          <form className="row" style={{ marginTop: 10, gap: 8 }} onSubmit={(e) => { e.preventDefault(); if (valid && changed) onSave(val.trim() === '' ? 0 : n) }}>
-            <span style={{ position: 'relative' }}>
-              <span style={{ position: 'absolute', left: 12, top: 11, color: C.faint, fontSize: 14 }}>$</span>
-              <input className="input mono" inputMode="decimal" aria-label="Budget in USD" disabled={!canEdit} value={val} onChange={(e) => setVal(e.target.value)} placeholder="0" style={{ width: 160, paddingLeft: 24, borderColor: valid ? undefined : C.bad }} />
-            </span>
-            <button className="btn primary small" type="submit" disabled={!canEdit || !valid || !changed} style={{ height: 40 }}>{current ? 'Update' : 'Set budget'}</button>
-          </form>
-          <div className="caption" style={{ marginTop: 8 }}>
-            {meta?.updatedAt ? `Set by ${meta.updatedBy || 'someone'} · ${meta.updatedAt.slice(0, 10)}` : 'Not set yet — empty saves nothing; clear and save to remove'}
+      <div className="between" style={{ alignItems: 'flex-start' }}>
+        <div style={{ display: 'flex', gap: 36, flexWrap: 'wrap' }}>
+          <div>
+            <div className="label">Monthly budget · all rewards</div>
+            <div style={{ marginTop: 10 }}>
+              <MoneyForm key={m?.id || 'none'} label="Monthly budget in USD" value={m?.amountUSD ?? null} canEdit={canEdit} onSave={onSaveMonthly} cta={m ? 'Update' : 'Set'} />
+            </div>
+            <div className="caption" style={{ marginTop: 8, maxWidth: 300 }}>
+              {m ? `Since ${monthLabel(m.id.slice(2))}, until changed${stamp(m)}` : 'Marketplace + Buff Pass + raffles. Applies from this month until you change it.'}
+              {m && m.id.slice(2) !== ym && ' · a change applies from ' + monthLabel(ym)}
+            </div>
+          </div>
+          <div>
+            <div className="label">This period · {periodLabel(pid)}</div>
+            {override ? (
+              <>
+                <div style={{ marginTop: 10 }}><MoneyForm key={info.entry?.id || 'new'} label="Budget for this period in USD" value={info.entry?.amountUSD ?? null} canEdit={canEdit} onSave={(n) => { onSavePeriod(n); if (!n) setOverride(false) }} cta={info.entry ? 'Update' : 'Set'} /></div>
+                <div className="caption" style={{ marginTop: 8 }}>
+                  {info.entry ? `Overrides the monthly budget${stamp(info.entry)} · clear and save to go back` : <>Only this half-month. <button className="btn small" style={{ height: 22, padding: '0 8px' }} onClick={() => setOverride(false)}>Cancel</button></>}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="mono" style={{ fontSize: 26, fontWeight: 600, marginTop: 10, height: 40, display: 'flex', alignItems: 'center' }}>{info.amount ? money(info.amount) : '—'}</div>
+                <div className="caption" style={{ marginTop: 8 }}>
+                  {info.from === 'monthly' ? `From the monthly budget · ${periodRange(pid).days} of its month's days` : 'Set a monthly budget first'}
+                  {canEdit && <> · <button className="btn small" style={{ height: 22, padding: '0 8px' }} onClick={() => setOverride(true)}>Override</button></>}
+                </div>
+              </>
+            )}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap' }}>
           <div>
-            <div className="caption">Opened by current allocations</div>
+            <div className="caption">Marketplace plan opens</div>
             <div className="mono" style={{ fontSize: 18, fontWeight: 600, marginTop: 4 }}>{money(planOpened)}</div>
-            {ref > 0 && <div className="caption" style={{ color: planOpened >= ref ? C.good : C.warn }}>{Math.round((planOpened / ref) * 100)}% of budget</div>}
+            {budget > 0 && <div className="caption">{Math.round((planOpened / budget) * 100)}% of the budget</div>}
           </div>
           <div>
             <div className="caption">Expected to be bought</div>
             <div className="mono" style={{ fontSize: 18, fontWeight: 600, marginTop: 4 }}>{money(planExpected)}</div>
-            {ref > 0 && <div className="caption" style={{ color: planExpected >= ref * 0.9 ? C.good : C.warn }}>{Math.round((planExpected / ref) * 100)}% of budget</div>}
+            {budget > 0 && <div className="caption">{Math.round((planExpected / budget) * 100)}% of the budget</div>}
           </div>
         </div>
       </div>
+    </Card>
+  )
+}
+
+/** Where the period's money went: marketplace vs. Buff Pass / raffle / other prizes from internal stock. */
+function RewardsCard({ totals, prizes, budget, hasPrizes }: { totals: Record<Kind, number>; prizes: PrizeLine[]; budget: number | null; hasPrizes: boolean }) {
+  const all = KINDS.reduce((a, k) => a + totals[k], 0)
+  const COL: Record<Kind, string> = { mp: C.lime, buffpass: C.sky, raffle: C.violet, other: C.orange }
+  const unpriced = prizes.filter((p) => p.source === 'none')
+  return (
+    <Card delay={300}>
+      <div className="between" style={{ alignItems: 'flex-start' }}>
+        <div><h2 className="h2">All rewards</h2><div className="caption" style={{ marginTop: 4 }}>Everything the budget pays for in this period, today included</div></div>
+        <div className="mono caption">{money(all)}{budget ? ` of ${money(budget)}` : ''}</div>
+      </div>
+      <div style={{ display: 'flex', height: 10, borderRadius: 5, overflow: 'hidden', background: '#23262B', marginTop: 16 }}>
+        {KINDS.map((k) => totals[k] > 0 && <span key={k} title={`${KIND_LABEL[k]}: ${money(totals[k])}`} style={{ width: `${(totals[k] / Math.max(all, budget || 0, 1)) * 100}%`, background: COL[k] }} />)}
+      </div>
+      <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', marginTop: 14 }}>
+        {KINDS.map((k) => (
+          <div key={k}>
+            <div className="caption row" style={{ gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: COL[k] }} />{KIND_LABEL[k]}</div>
+            <div className="mono" style={{ fontSize: 18, fontWeight: 600, marginTop: 4 }}>{k !== 'mp' && !hasPrizes ? '—' : money(totals[k])}</div>
+            <div className="caption">{budget && (k === 'mp' || hasPrizes) ? `${totals[k] > 0 && totals[k] / budget < 0.005 ? '<1' : Math.round((totals[k] / budget) * 100)}% of the budget` : ''}</div>
+          </div>
+        ))}
+      </div>
+      {!hasPrizes && <div className="caption" style={{ marginTop: 12, color: C.warn }}>Buff Pass, raffle and other prizes load after the backend v9 update (Code-v9-all-rewards.gs) — until then only the marketplace is counted.</div>}
+      {prizes.length > 0 && (
+        <div style={{ marginTop: 16, borderTop: `1px solid ${C.line}` }}>
+          {prizes.map((p) => (
+            <div key={p.name} className="row" style={{ justifyContent: 'space-between', padding: '8px 0', borderBottom: `1px solid ${C.line}`, fontSize: 13 }}>
+              <span className="row" style={{ gap: 8, minWidth: 0 }}>
+                <span className="chip" style={{ color: COL[p.kind], background: COL[p.kind] + '1A' }}>{KIND_LABEL[p.kind]}</span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.name}>{p.name}</span>
+              </span>
+              <span className="mono" style={{ whiteSpace: 'nowrap', color: p.source === 'none' ? C.warn : C.text }}>
+                {p.units} × {p.source === 'none' ? 'no price' : money(p.unitUSD, 2)} {p.source !== 'none' && <span style={{ color: C.muted }}>= {money(p.spent)}</span>}
+              </span>
+            </div>
+          ))}
+          {unpriced.length > 0 && <div className="caption" style={{ marginTop: 10 }}>"No price" items count as $0. Add them in Products with their exact name as the Redash name (and purpose Raffles / Buff Pass) to price and classify them.</div>}
+        </div>
+      )}
     </Card>
   )
 }

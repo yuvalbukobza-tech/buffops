@@ -1,5 +1,5 @@
 // Backend access (Google Apps Script). Same endpoint and key as BuffOps v1.
-import { OPTIONAL_KEYS, STATE_KEYS, type AppState, type MpDailyRow, type MpStockRow, type Receipt, type RedashRow } from './types'
+import { OPTIONAL_KEYS, STATE_KEYS, type AppState, type MpDailyRow, type MpStockRow, type RaffleRow, type Receipt, type RedashRow } from './types'
 
 const LIVE_URL = 'https://script.google.com/macros/s/AKfycbyDJ6nUT5l3Y7R95oi--vp9QM-VZ1urwB64-pMbCPdgyVArgDzQTOiMFvz-ZpWDXADy/exec'
 export const API_URL: string = import.meta.env.VITE_API_URL || LIVE_URL
@@ -122,6 +122,11 @@ export async function fetchMpDaily(from: string, to: string, ctl: PullControl = 
 /** Live stock and demand per active item (backend v8). */
 export async function fetchMpStock(ctl: PullControl = { cancelled: false }, onProgress?: (state: string, seconds: number) => void): Promise<MpStockRow[]> {
   return mpq<MpStockRow>('q=mpstock', ctl, onProgress)
+}
+
+/** Raffles of the last 120 days with entries and prizes (backend v9). */
+export async function fetchRaffles(ctl: PullControl = { cancelled: false }, onProgress?: (state: string, seconds: number) => void): Promise<RaffleRow[]> {
+  return mpq<RaffleRow>('q=raffles', ctl, onProgress)
 }
 
 async function mpq<R>(params: string, ctl: PullControl, onProgress?: (state: string, seconds: number) => void): Promise<R[]> {

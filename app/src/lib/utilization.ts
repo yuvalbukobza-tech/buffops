@@ -49,10 +49,27 @@ export function periodLabel(id: string): string {
 export const monthLabel = (ym: string) => `${MONTHS[+ym.slice(5, 7) - 1]} ${ym.slice(0, 4)}`
 export const dayLabel = (d: string) => `${MONTHS[+d.slice(5, 7) - 1]} ${+d.slice(8)}`
 
-export const budgetOf = (periods: BudgetPeriod[], id: string): number | null => {
-  const p = periods.find((x) => x.id === id)
-  return p && Number.isFinite(p.amountUSD) && p.amountUSD > 0 ? p.amountUSD : null
+// ── Budgets ─────────────────────────────────────────────────────────────────────
+// A half-month entry ("2026-11-A") wins; otherwise the latest standing monthly budget ("M:2026-11")
+// from that month or before, split by days so every day of the month gets the same amount.
+export const monthlyId = (ym: string) => `M:${ym}`
+const valid = (p?: BudgetPeriod) => (p && Number.isFinite(p.amountUSD) && p.amountUSD > 0 ? p : undefined)
+const daysInMonth = (ym: string) => new Date(Date.UTC(+ym.slice(0, 4), +ym.slice(5, 7), 0)).getUTCDate()
+
+/** The standing monthly budget that applies in month ym (YYYY-MM), if any. */
+export function monthlyFor(periods: BudgetPeriod[], ym: string): BudgetPeriod | undefined {
+  return periods.filter((p) => p.id.startsWith('M:') && p.id.slice(2) <= ym && valid(p)).sort((a, b) => b.id.localeCompare(a.id))[0]
 }
+
+export interface BudgetInfo { amount: number | null; from: 'period' | 'monthly' | null; monthly?: BudgetPeriod; entry?: BudgetPeriod }
+export function budgetInfo(periods: BudgetPeriod[], id: string): BudgetInfo {
+  const entry = valid(periods.find((x) => x.id === id))
+  const monthly = monthlyFor(periods, id.slice(0, 7))
+  if (entry) return { amount: entry.amountUSD, from: 'period', monthly, entry }
+  if (monthly) return { amount: Math.round((monthly.amountUSD * periodRange(id).days * 100) / daysInMonth(id.slice(0, 7))) / 100, from: 'monthly', monthly }
+  return { amount: null, from: null }
+}
+export const budgetOf = (periods: BudgetPeriod[], id: string): number | null => budgetInfo(periods, id).amount
 
 /** Budget for one day = its period's budget spread evenly over the period's days; null if the period has none. */
 export function dailyBudget(day: string, periods: BudgetPeriod[]): number | null {
@@ -61,7 +78,7 @@ export function dailyBudget(day: string, periods: BudgetPeriod[]): number | null
   return b === null ? null : b / periodRange(id).days
 }
 
-/** Insert or replace a period's budget; 0 / empty removes it. */
+/** Insert or replace a budget entry (half-month or "M:" monthly); 0 / empty removes it. */
 export function upsertBudget(periods: BudgetPeriod[], id: string, amountUSD: number, by?: string, now = new Date().toISOString()): BudgetPeriod[] {
   const rest = periods.filter((p) => p.id !== id)
   if (!(amountUSD > 0)) return rest
@@ -70,8 +87,9 @@ export function upsertBudget(periods: BudgetPeriod[], id: string, amountUSD: num
 }
 
 // ── Unit price of a bought item ─────────────────────────────────────────────────
-export type PriceSource = 'plan' | 'face' | 'flat'
-export interface Pricing { usd: number; source: PriceSource; productId?: number }
+/** plan = BuffOps product price · face = value in the name · flat = $0.66 rule (marketplace only) · none = no price known (counted as $0). */
+export type PriceSource = 'plan' | 'face' | 'flat' | 'none'
+export interface Pricing { usd: number; source: PriceSource; productId?: number; purpose?: string }
 
 /** Face value from the name: "$5 …", "£10 …", "€5 …" (also CA$ / A$), converted to USD. 0 if none. */
 export function faceValueUSD(name: string | null | undefined): number {
@@ -81,44 +99,102 @@ export function faceValueUSD(name: string | null | undefined): number {
   return parseFloat(m[2]) * (FX[cur] || 1)
 }
 
+export const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ')
+
 /**
- * Price per unit for a purchase name: the matched BuffOps product's price (what Buff pays),
- * else the face value in the name, else the flat rate. Memoized per name.
+ * Price per unit for a name: a BuffOps product whose Redash name is exactly this name, or the product
+ * an allocation matches; else the face value in the name; else the flat rate for marketplace items
+ * (charity and the like) and NO price for internal-stock prizes (a headset is not worth $0.66).
+ * Memoized per name.
  */
-export function makePricer(allocs: Allocs, products: Product[]): (name: string) => Pricing {
+export function makePricer(allocs: Allocs, products: Product[]): (name: string, internal?: boolean) => Pricing {
   const all: AllocRow[] = Object.values(allocs).flat().filter(Boolean)
+  const byName = new Map<string, Product>()
+  for (const p of products) if (p.redashName) byName.set(norm(p.redashName), p)
   const cache = new Map<string, Pricing>()
-  return (name: string) => {
-    let p = cache.get(name)
+  return (name: string, internal = false) => {
+    const key = (internal ? 'i|' : 'm|') + name
+    let p = cache.get(key)
     if (p) return p
-    const m = matchProduct(name, all, products)
-    const prod = m && !m.weak ? products.find((x) => x.id === m.alloc.productId) : undefined
+    let prod = byName.get(norm(name))
+    if (!prod) {
+      const m = matchProduct(name, all, products)
+      prod = m && !m.weak ? products.find((x) => x.id === m.alloc.productId) : undefined
+    }
     const planUsd = prod ? calcPriceUSD(prod) : 0
     const face = faceValueUSD(name)
-    p = planUsd > 0 ? { usd: planUsd, source: 'plan', productId: prod!.id }
-      : face > 0 ? { usd: face, source: 'face', productId: prod?.id }
-      : { usd: FLAT_UNPRICED_USD, source: 'flat', productId: prod?.id }
-    cache.set(name, p)
+    const base = { productId: prod?.id, purpose: prod?.purpose }
+    p = planUsd > 0 ? { ...base, usd: planUsd, source: 'plan' }
+      : face > 0 ? { ...base, usd: face, source: 'face' }
+      : internal ? { ...base, usd: 0, source: 'none' }
+      : { ...base, usd: FLAT_UNPRICED_USD, source: 'flat' }
+    cache.set(key, p)
     return p
   }
 }
 
-// ── Spend per day ───────────────────────────────────────────────────────────────
-export interface DaySpend { usd: number; units: number }
+// ── What kind of reward a row is ───────────────────────────────────────────────
+export type Kind = 'mp' | 'buffpass' | 'raffle' | 'other'
+export const KINDS: Kind[] = ['mp', 'buffpass', 'raffle', 'other']
+export const KIND_LABEL: Record<Kind, string> = { mp: 'Marketplace', buffpass: 'Buff Pass', raffle: 'Raffles', other: 'Other prizes' }
+export const isInternal = (r: Pick<MpDailyRow, 'source'>) => r.source === 'INTERNAL_STORAGE'
 
-export function spendByDay(rows: MpDailyRow[], price: (name: string) => Pricing): Map<string, DaySpend> {
+/**
+ * Marketplace purchases are 'mp'; internal-stock prizes by their BuffOps product purpose, else by name,
+ * else 'raffle' when the name is a prize of a raffle (rafflePrizes = normalized prize names from the Raffles Service).
+ */
+export function kindOf(r: Pick<MpDailyRow, 'source' | 'product_name'>, purpose?: string, rafflePrizes?: Set<string>): Kind {
+  if (!isInternal(r)) return 'mp'
+  const n = r.product_name || ''
+  if (purpose === 'Buff Pass' || /buff\s*pass/i.test(n)) return 'buffpass'
+  if (purpose === 'Raffles' || /raffle/i.test(n) || rafflePrizes?.has(norm(n))) return 'raffle'
+  return 'other'
+}
+
+// ── Spend per day ───────────────────────────────────────────────────────────────
+export interface DaySpend { usd: number; units: number; kinds: Record<Kind, number> }
+type Pricer = (name: string, internal?: boolean) => Pricing
+
+/** Spend per day over every reward kind (marketplace + internal-stock prizes), with the split by kind. */
+export function spendByDay(rows: MpDailyRow[], price: Pricer, rafflePrizes?: Set<string>): Map<string, DaySpend> {
   const out = new Map<string, DaySpend>()
   for (const r of rows) {
     const day = String(r.day).slice(0, 10)
     const name = (r.product_name || '').trim()
     const n = Number(r.purchases) || 0
     if (!name || !n) continue
-    const e = out.get(day) || { usd: 0, units: 0 }
-    e.usd += n * price(name).usd
+    const pr = price(name, isInternal(r))
+    const e = out.get(day) || { usd: 0, units: 0, kinds: { mp: 0, buffpass: 0, raffle: 0, other: 0 } }
+    e.usd += n * pr.usd
     e.units += n
+    e.kinds[kindOf(r, pr.purpose, rafflePrizes)] += n * pr.usd
     out.set(day, e)
   }
   return out
+}
+
+/** Sum of the kind split over [from, to]. */
+export function kindTotals(byDay: Map<string, DaySpend>, from: string, to: string): Record<Kind, number> {
+  const t: Record<Kind, number> = { mp: 0, buffpass: 0, raffle: 0, other: 0 }
+  for (const [d, s] of byDay) if (d >= from && d <= to) for (const k of KINDS) t[k] += s.kinds[k]
+  return t
+}
+
+/** Internal-stock prizes (Buff Pass, raffles, other) given in [from, to], one line per name. */
+export interface PrizeLine { name: string; kind: Kind; units: number; unitUSD: number; source: PriceSource; spent: number }
+export function prizeLines(rows: MpDailyRow[], from: string, to: string, price: Pricer, rafflePrizes?: Set<string>): PrizeLine[] {
+  const agg = new Map<string, PrizeLine>()
+  for (const r of rows) {
+    const d = String(r.day).slice(0, 10)
+    const name = (r.product_name || '').trim()
+    if (!isInternal(r) || !name || d < from || d > to) continue
+    const pr = price(name, true)
+    const e = agg.get(name) || { name, kind: kindOf(r, pr.purpose, rafflePrizes), units: 0, unitUSD: pr.usd, source: pr.source, spent: 0 }
+    e.units += Number(r.purchases) || 0
+    e.spent = e.units * e.unitUSD
+    agg.set(name, e)
+  }
+  return [...agg.values()].sort((a, b) => KINDS.indexOf(a.kind) - KINDS.indexOf(b.kind) || b.spent - a.spent || b.units - a.units)
 }
 
 // ── One period: spend so far, pace, forecast ──────────────────────────────────
@@ -227,7 +303,8 @@ export interface ProductLine {
 
 const liveKey = (s: string) => s.trim().toLowerCase()
 
-export function productLines(rows: MpDailyRow[], from: string, to: string, days: number, data: { allocs: Allocs; products: Product[] }, price: (name: string) => Pricing, stock?: MpStockRow[] | null): ProductLine[] {
+/** Marketplace purchases only (internal-stock prizes are in prizeLines). */
+export function productLines(rows: MpDailyRow[], from: string, to: string, days: number, data: { allocs: Allocs; products: Product[] }, price: Pricer, stock?: MpStockRow[] | null): ProductLine[] {
   // Units opened per day per BuffOps product (active rows, every country, marketplace purpose only).
   const planned = new Map<number, number>()
   for (const rowsC of Object.values(data.allocs)) for (const r of rowsC || []) {
@@ -252,7 +329,7 @@ export function productLines(rows: MpDailyRow[], from: string, to: string, days:
   const agg = new Map<string, { units: number }>()
   for (const r of rows) {
     const d = String(r.day).slice(0, 10)
-    if (d < from || d > to) continue
+    if (d < from || d > to || isInternal(r)) continue
     const name = (r.product_name || '').trim()
     if (!name) continue
     const e = agg.get(name) || { units: 0 }
@@ -289,7 +366,7 @@ export function productLines(rows: MpDailyRow[], from: string, to: string, days:
 
 /** Spend by price source, so the screen can say how much is exact vs estimated. */
 export function spendBySource(lines: ProductLine[]): Record<PriceSource, number> {
-  const out: Record<PriceSource, number> = { plan: 0, face: 0, flat: 0 }
+  const out: Record<PriceSource, number> = { plan: 0, face: 0, flat: 0, none: 0 }
   for (const l of lines) out[l.source] += l.spent
   return out
 }

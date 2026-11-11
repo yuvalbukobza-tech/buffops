@@ -9,7 +9,7 @@ import VendorOrders from './budget/VendorOrders'
 type Sub = 'overview' | 'util' | 'actual' | 'orders' | 'finance'
 const SUBS: { value: Sub; label: string; title: string; sub: string }[] = [
   { value: 'overview', label: 'Overview', title: 'Budget', sub: 'What each vendor needs per month, and what it is for' },
-  { value: 'util', label: 'Utilization', title: 'Marketplace utilization', sub: 'The 15-day budget against what users really bought — day by day' },
+  { value: 'util', label: 'Utilization', title: 'Rewards utilization', sub: 'The rewards budget (marketplace, Buff Pass, raffles) against what was really given — day by day' },
   { value: 'actual', label: 'Planned vs actual', title: 'Planned vs actual', sub: 'Did each vendor spend what we planned?' },
   { value: 'orders', label: 'Vendor orders', title: 'Vendor orders', sub: 'Build a code order or a money transfer for the next 15 days' },
   { value: 'finance', label: 'Finance requests', title: 'Finance requests', sub: 'Transfers requested from finance, month by month' },

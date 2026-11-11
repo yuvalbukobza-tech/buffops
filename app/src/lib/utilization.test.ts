@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { AllocRow, BudgetPeriod, MpDailyRow, MpStockRow, Product } from './types'
 import {
-  FLAT_UNPRICED_USD, buckets, dailyBudget, dayList, faceValueUSD, makePricer, periodLabel, periodOf, periodRange,
-  productLines, shiftPeriod, spendByDay, spendBySource, summarizePeriod, upsertBudget,
+  FLAT_UNPRICED_USD, budgetInfo, budgetOf, buckets, dailyBudget, dayList, faceValueUSD, kindOf, kindTotals, makePricer, monthlyFor,
+  periodLabel, periodOf, periodRange, prizeLines, productLines, shiftPeriod, spendByDay, spendBySource, summarizePeriod, upsertBudget,
 } from './utilization'
 
 const prod = (over: Partial<Product>): Product => ({
@@ -66,9 +66,73 @@ describe('pricing', () => {
     const products = [prod({ id: 1, brand: 'Riot', priceToBuffLocal: 4.5, redashName: '$5 Riot Access Code US' })]
     const allocs = { US: [{ productId: 1, pulsesPerDay: 3, qtyPerPulse: 2 }] }
     const price = makePricer(allocs, products)
-    expect(price('$5 Riot Access Code US')).toEqual({ usd: 4.5, source: 'plan', productId: 1 })
+    expect(price('$5 Riot Access Code US')).toMatchObject({ usd: 4.5, source: 'plan', productId: 1 })
     expect(price('$10 Roblox Gift Card')).toMatchObject({ usd: 10, source: 'face' })
     expect(price('Protect Marine Area!')).toMatchObject({ usd: FLAT_UNPRICED_USD, source: 'flat' })
+  })
+})
+
+describe('standing monthly budget', () => {
+  const periods: BudgetPeriod[] = [{ id: 'M:2026-11', amountUSD: 30000 }, { id: 'M:2027-02', amountUSD: 28000 }]
+  it('splits a month by days and keeps going until the next monthly entry', () => {
+    expect(budgetInfo(periods, '2026-11-A')).toMatchObject({ amount: 15000, from: 'monthly' })
+    expect(budgetOf(periods, '2026-12-B')).toBeCloseTo((30000 * 16) / 31, 2)
+    expect(budgetOf(periods, '2027-01-A')).toBeCloseTo((30000 * 15) / 31, 2)
+    expect(budgetOf(periods, '2027-02-B')).toBe(13000) // Feb 2027: days 16–28 = 13 of 28 days of 28000
+    expect(budgetOf(periods, '2026-10-B')).toBeNull() // before the first monthly entry
+    expect(dailyBudget('2026-12-03', periods)).toBeCloseTo(30000 / 31, 2) // same every day of the month
+    expect(dailyBudget('2026-12-20', periods)).toBeCloseTo(30000 / 31, 2)
+  })
+  it('a half-month entry overrides the monthly one', () => {
+    const p = [...periods, { id: '2026-11-B', amountUSD: 20000 }]
+    expect(budgetInfo(p, '2026-11-B')).toMatchObject({ amount: 20000, from: 'period' })
+    expect(budgetInfo(p, '2026-11-A').from).toBe('monthly')
+    expect(monthlyFor(p, '2026-12')?.amountUSD).toBe(30000)
+  })
+})
+
+describe('reward kinds', () => {
+  const products = [
+    prod({ id: 7, brand: 'Steam', priceToBuffLocal: 48, purpose: 'Buff Pass', redashName: '$50 Steam - buffpass' }),
+    prod({ id: 8, brand: 'JBL', priceToBuffLocal: 199, purpose: 'Raffles', redashName: 'JBL Quantum 950X' }),
+  ]
+  const price = makePricer({}, products) // not in any allocation: matched by exact Redash name
+  const internal = (day: string, name: string, n: number): MpDailyRow => ({ day, product_name: name, tier: 'REGULAR', source: 'INTERNAL_STORAGE', purchases: n })
+  const rows = [
+    row('2026-11-02', '$10 Steam', 3),
+    internal('2026-11-02', '$50 Steam - buffpass', 2),
+    internal('2026-11-02', 'JBL Quantum 950X', 1),
+    internal('2026-11-03', '$10 Riot - Raffle Halloween', 1),
+    internal('2026-11-03', '€25 Game Boost Gift Card', 1),
+    internal('2026-11-03', 'Mystery headset', 1),
+  ]
+  it('classifies by product purpose, then by name; marketplace when the source is missing (backend v8)', () => {
+    expect(kindOf({ source: undefined, product_name: '$50 Steam - buffpass' })).toBe('mp')
+    expect(kindOf({ source: 'INTERNAL_STORAGE', product_name: 'JBL Quantum 950X' }, 'Raffles')).toBe('raffle')
+    expect(kindOf({ source: 'INTERNAL_STORAGE', product_name: '$10 Riot - Raffle Halloween' })).toBe('raffle')
+    expect(kindOf({ source: 'INTERNAL_STORAGE', product_name: '$50 Amazon Gift Card - BuffPass' })).toBe('buffpass')
+    expect(kindOf({ source: 'INTERNAL_STORAGE', product_name: '€25 Game Boost Gift Card' })).toBe('other')
+  })
+  it('prices prizes from the product, else the name; unknown prizes are $0, not the flat rate', () => {
+    expect(price('JBL Quantum 950X', true)).toMatchObject({ usd: 199, source: 'plan', purpose: 'Raffles' })
+    expect(price('Mystery headset', true)).toMatchObject({ usd: 0, source: 'none' })
+    expect(price('Mystery headset')).toMatchObject({ usd: FLAT_UNPRICED_USD, source: 'flat' })
+  })
+  it('spend counts every kind; the product table counts the marketplace only', () => {
+    const byDay = spendByDay(rows, price)
+    expect(byDay.get('2026-11-02')).toMatchObject({ usd: 30 + 96 + 199, units: 6 })
+    const k = kindTotals(byDay, '2026-11-01', '2026-11-15')
+    expect(k.mp).toBe(30)
+    expect(k.buffpass).toBe(96)
+    expect(k.raffle).toBe(199 + 10)
+    expect(k.other).toBeCloseTo(25 * 1.17)
+    expect(productLines(rows, '2026-11-01', '2026-11-15', 15, { allocs: {}, products }, price, null).map((l) => l.name)).toEqual(['$10 Steam'])
+    const prizes = prizeLines(rows, '2026-11-01', '2026-11-15', price)
+    expect(prizes.map((p) => [p.kind, p.name])).toEqual([
+      ['buffpass', '$50 Steam - buffpass'], ['raffle', 'JBL Quantum 950X'], ['raffle', '$10 Riot - Raffle Halloween'],
+      ['other', '€25 Game Boost Gift Card'], ['other', 'Mystery headset'],
+    ])
+    expect(prizes.at(-1)).toMatchObject({ source: 'none', spent: 0 })
   })
 })
 

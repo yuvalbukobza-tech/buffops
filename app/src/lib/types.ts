@@ -108,8 +108,9 @@ export interface VendorOrder {
 }
 
 /**
- * v2 (backend v8+): the marketplace budget for one half-month, entered by hand.
- * id is "YYYY-MM-A" (1st–15th) or "YYYY-MM-B" (16th–end of month).
+ * v2 (backend v8+): the rewards budget (marketplace + Buff Pass + raffles), entered by hand.
+ * id "YYYY-MM-A" (1st–15th) / "YYYY-MM-B" (16th–end) = budget for that half-month (overrides the monthly one);
+ * id "M:YYYY-MM" = standing monthly budget from that month on, until a later "M:" entry.
  */
 export interface BudgetPeriod {
   id: string
@@ -137,12 +138,27 @@ export const STATE_KEYS = ['products', 'allocs', 'orders', 'transactions', 'appU
 /** Saved like the others, but older data may not have them (defaulted on load). The server keeps them only from backend v8. */
 export const OPTIONAL_KEYS = ['budgetPeriods'] as const satisfies readonly (keyof AppState)[]
 
-/** Marketplace gift cards bought per day per product (backend v8, ?action=mpq&q=mpdaily). */
+/** Gift cards given per day per product (backend v8+, ?action=mpq&q=mpdaily). */
 export interface MpDailyRow {
   day: string
   product_name: string | null
   tier: string | null
+  /** v9+: EXTERNAL_MARKETPLACE (bought in the marketplace) or INTERNAL_STORAGE (Buff Pass / raffle prizes …). Missing on v8 = marketplace. */
+  source?: string | null
   purchases: number
+}
+
+/** One raffle of the last 120 days (backend v9, ?action=mpq&q=raffles). entries = stored participants_count. */
+export interface RaffleRow {
+  id: string
+  title: string | null
+  platforms: string | null
+  countries: string | null
+  start_day: string
+  end_day: string
+  entries: number | null
+  status: string | null
+  prizes: string | null
 }
 
 /** Live stock and demand per active item (backend v8, ?action=mpq&q=mpstock). */

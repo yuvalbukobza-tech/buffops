@@ -1,8 +1,8 @@
 // Marketplace data hooks for the Utilization screen (backend v8 ?action=mpq).
 // Same pattern as useRedash: cached for the browser session, progress text, cancel stops the run in Redash too.
 import { useEffect, useRef, useState } from 'react'
-import { BackendOutdated, PullCancelled, backendVersion, fetchMpDaily, fetchMpStock, redashCancel, type PullControl } from './api'
-import type { MpDailyRow, MpStockRow } from './types'
+import { BackendOutdated, PullCancelled, backendVersion, fetchMpDaily, fetchMpStock, fetchRaffles, redashCancel, type PullControl } from './api'
+import type { MpDailyRow, MpStockRow, RaffleRow } from './types'
 
 export const MP_CANCELLED = 'cancelled'
 export const MP_OUTDATED = 'outdated'
@@ -55,10 +55,13 @@ function useMpQuery<R>(key: string, fetcher: Fetcher<R>, enabled = true) {
 
 /** Gift cards bought per day per product for [from, to) — to is exclusive. */
 export const useMpDaily = (from: string, to: string, enabled = true) =>
-  useMpQuery<MpDailyRow>(`bo2_mp_daily_${from}_${to}`, (c, p) => fetchMpDaily(from, to, c, p), enabled)
+  useMpQuery<MpDailyRow>(`bo2_mp_daily2_${from}_${to}`, (c, p) => fetchMpDaily(from, to, c, p), enabled)
 
 /** Live stock + 14/30-day demand per active marketplace item. */
 export const useMpStock = (enabled = true) => useMpQuery<MpStockRow>('bo2_mp_stock', (c, p) => fetchMpStock(c, p), enabled)
+
+/** Raffles of the last 120 days (backend v9). */
+export const useRaffles = (enabled = true) => useMpQuery<RaffleRow>('bo2_mp_raffles', (c, p) => fetchRaffles(c, p), enabled)
 
 /** Backend version (0 = unknown / older than v8). Checked once per page load. */
 let versionPromise: Promise<number> | null = null
