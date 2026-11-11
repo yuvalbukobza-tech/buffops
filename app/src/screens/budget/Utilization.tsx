@@ -9,21 +9,32 @@ import { useSession } from '../../lib/session'
 import { useData, useStore } from '../../lib/store'
 import type { BudgetPeriod } from '../../lib/types'
 import {
-  KINDS, KIND_LABEL, addDays, budgetInfo, buckets, dayList, dailyBudget, kindTotals, makePricer, monthLabel, monthlyId, periodLabel, periodOf,
+  KINDS, KIND_LABEL, addDays, budgetInfo, buckets, dayLabel, dayList, dailyBudget, kindTotals, makePricer, monthLabel, monthlyFor, monthlyId, periodLabel, periodOf,
   periodRange, prizeLines, productLines, shiftPeriod, spendByDay, spendBySource, summarizePeriod, upsertBudget,
-  type BudgetInfo, type Flag, type Grain, type Kind, type PrizeLine,
+  type Bucket, type BudgetInfo, type Flag, type Grain, type Kind, type PrizeLine,
 } from '../../lib/utilization'
 import { rafflePrizeNames, raffleStats } from '../../lib/recommend'
 import { C, Card, Icon, Kpi, Seg, Toast, UtilBar, money } from '../../ui/kit'
 import Leftover from './Leftover'
+import SpendLines, { KIND_COLOR } from './SpendLines'
 
 const NEED_VERSION = 8
 /** v9 adds Buff Pass / raffle prizes (internal stock) to the daily query. */
 const PRIZES_VERSION = 9
-const firstOfPrevMonth = (day: string) => {
-  const y = +day.slice(0, 4), m = +day.slice(5, 7)
-  return m === 1 ? `${y - 1}-12-01` : `${y}-${String(m - 1).padStart(2, '0')}-01`
+/** First day of the month `n` months before `day`'s month. */
+const monthsBack = (day: string, n: number) => {
+  let y = +day.slice(0, 4), m = +day.slice(5, 7) - n
+  while (m < 1) { m += 12; y-- }
+  return `${y}-${String(m).padStart(2, '0')}-01`
 }
+const firstOfPrevMonth = (day: string) => monthsBack(day, 1)
+
+/** History window: the last N months (this one included) or from a chosen day. */
+type Span = '3' | '6' | '12' | 'custom'
+const SPANS: { value: Span; label: string }[] = [{ value: '3', label: '3 months' }, { value: '6', label: '6 months' }, { value: '12', label: '12 months' }, { value: 'custom', label: 'From…' }]
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/
+const remember = (k: string, v: string) => { try { sessionStorage.setItem(k, v) } catch { /* ignore */ } }
+const recall = (k: string) => { try { return sessionStorage.getItem(k) } catch { return null } }
 
 const FLAG: Record<Flag, { label: string; color: string; tip: string }> = {
   soldout: { label: 'Sold out', color: C.orange, tip: 'Out of stock right now — users want more than we open' },
@@ -42,8 +53,16 @@ export default function Utilization() {
   const version = useBackendVersion()
   const today = iso(new Date())
   const [pid, setPid] = useState(() => periodOf(today))
-  const [grain, setGrain] = useState<Grain>('day')
+  const [grain, setGrain] = useState<Grain>(() => (recall('bo2_util_grain') as Grain) || 'week')
+  const [span, setSpan] = useState<Span>(() => (recall('bo2_util_span') as Span) || '3')
+  const [customFrom, setCustomFrom] = useState(() => recall('bo2_util_from') || monthsBack(today, 5))
   const [toast, setToast] = useState('')
+  const pickGrain = (g: Grain) => { setGrain(g); remember('bo2_util_grain', g) }
+  const pickSpan = (s: Span) => {
+    setSpan(s); remember('bo2_util_span', s)
+    if ((s === '6' || s === '12') && grain === 'day') pickGrain('week') // 180+ daily points are noise
+  }
+  const histFrom = span === 'custom' ? (ISO_DAY.test(customFrom) && customFrom <= today ? customFrom : monthsBack(today, 2)) : monthsBack(today, Number(span) - 1)
 
   const range = periodRange(pid)
   // One query covers last month → today (exclusive end = tomorrow); going further back widens it.
@@ -52,6 +71,8 @@ export default function Utilization() {
   const backendOk = version === null ? null : version >= NEED_VERSION
   const hasPrizes = (version || 0) >= PRIZES_VERSION
   const daily = useMpDaily(from, to, backendOk === true)
+  // History has its own query (a longer range can take a minute); the previous chart stays up, dimmed, while it loads.
+  const hist = useMpDaily(histFrom, to, backendOk === true, true)
   const stock = useMpStock(backendOk === true)
   const raffleQ = useRaffles(hasPrizes)
   const raffles = useMemo(() => (raffleQ.rows ? raffleStats(raffleQ.rows, today) : null), [raffleQ.rows, today])
@@ -90,8 +111,18 @@ export default function Utilization() {
   const src = spendBySource(lines)
   const srcTotal = src.plan + src.face + src.flat
 
-  // Newest first.
-  const table = useMemo(() => buckets(grain, from, today, today, byDay, periods).reverse(), [grain, from, today, byDay, periods])
+  const histByDay = useMemo(() => spendByDay(hist.rows || [], price, prizeSet), [hist.rows, price, prizeSet])
+  const series = useMemo(() => buckets(grain, histFrom, today, today, histByDay, periods), [grain, histFrom, today, histByDay, periods])
+  const table = useMemo(() => [...series].reverse(), [series]) // newest first
+  const histTotal = useMemo(() => {
+    const t = { spent: 0, budget: 0, budgetDays: 0, days: 0, kinds: { mp: 0, buffpass: 0, raffle: 0, other: 0 } as Record<Kind, number> }
+    for (const b of series) {
+      t.spent += b.spent; t.days += b.days
+      for (const k of KINDS) t.kinds[k] += b.kinds[k]
+      if (b.budget !== null) { t.budget += b.budget; t.budgetDays += b.days }
+    }
+    return t
+  }, [series])
 
   const canEdit = !store.viewOnly && backendOk === true
   const saveEntry = (id: string, amount: number, what: string) => {
@@ -101,6 +132,7 @@ export default function Utilization() {
   const ym = pid.slice(0, 7)
   const saveMonthly = (n: number) => saveEntry(monthlyId(ym), n, `Monthly budget from ${monthLabel(ym)}`)
   const savePeriod = (n: number) => saveEntry(pid, n, `Budget for ${periodLabel(pid)}`)
+  const saveMonth = (month: string, n: number) => saveEntry(monthlyId(month), n, `Monthly budget from ${monthLabel(month)}`)
 
   const loading = daily.loading || stock.loading
   const err = daily.error || stock.error
@@ -120,7 +152,7 @@ export default function Utilization() {
         </div>
         <div className="row">
           {loading && <span className="caption row" style={{ gap: 8 }}><span style={{ width: 14, height: 14, border: `2px solid ${C.line2}`, borderTopColor: C.lime, borderRadius: '50%', animation: 'bo-spin .8s linear infinite' }} />{daily.progress || stock.progress || 'Fetching purchases…'}<button onClick={() => { daily.cancel(); stock.cancel() }} style={{ border: '1px solid #4A1D1D', background: 'transparent', color: C.bad, borderRadius: 8, height: 26, padding: '0 10px', fontSize: 12, cursor: 'pointer' }}>Cancel</button></span>}
-          <button className="icon-btn" aria-label="Refresh purchases" disabled={!backendOk} onClick={() => { daily.refresh(); stock.refresh() }}>{Icon.refresh}</button>
+          <button className="icon-btn" aria-label="Refresh purchases" disabled={!backendOk} onClick={() => { daily.refresh(); hist.refresh(); stock.refresh() }}>{Icon.refresh}</button>
         </div>
       </div>
 
@@ -150,21 +182,67 @@ export default function Utilization() {
       {sum.current && daily.rows && <Leftover sum={sum} today={today} lines={lines} raffles={raffles}
         rafflesNote={!hasPrizes ? 'Raffle suggestions load after the backend v9 update.' : raffleQ.loading ? 'Loading raffles…' : raffleQ.error ? `Raffles didn't load: ${raffleQ.error}` : 'No raffle data.'} />}
 
-      <Card pad={false} delay={320} style={{ overflowX: 'auto' }}>
-        <div className="between" style={{ padding: '16px 18px 12px', alignItems: 'center' }}>
-          <div><h2 className="h2">Spend over time</h2><div className="caption" style={{ marginTop: 4 }}>{from} → today · budget per day = period budget ÷ its days</div></div>
-          <Seg value={grain} onChange={setGrain} options={[{ value: 'day', label: 'Daily' }, { value: 'week', label: 'Weekly' }, { value: 'month', label: 'Monthly' }]} />
+      {/* ── Over time: one range + grain for the chart and the table ── */}
+      <div className="between a-up" style={{ alignItems: 'flex-end', marginTop: 8, gap: 12, flexWrap: 'wrap', animationDelay: '300ms' }}>
+        <div>
+          <h2 className="h2">Over time</h2>
+          <div className="caption" style={{ marginTop: 4 }}>{dayLabel(histFrom)}, {histFrom.slice(0, 4)} → today · each day is held against its own period's budget</div>
         </div>
-        <div style={{ minWidth: 640 }}>
-          <div className="thead" style={{ gridTemplateColumns: TGRID }}><span>{grain === 'day' ? 'Day' : grain === 'week' ? 'Week' : 'Month'}</span><span>Spent</span><span>Budget</span><span>Utilization</span><span>Units</span></div>
-          <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+          {hist.loading && <span className="caption row" style={{ gap: 8 }}><span style={{ width: 14, height: 14, border: `2px solid ${C.line2}`, borderTopColor: C.lime, borderRadius: '50%', animation: 'bo-spin .8s linear infinite' }} />{hist.progress || 'Fetching history…'}<button onClick={hist.cancel} style={{ border: '1px solid #4A1D1D', background: 'transparent', color: C.bad, borderRadius: 8, height: 26, padding: '0 10px', fontSize: 12, cursor: 'pointer' }}>Cancel</button></span>}
+          <Seg value={span} onChange={pickSpan} options={SPANS} />
+          {span === 'custom' && <input type="date" className="input mono" aria-label="History from" value={customFrom} min="2024-01-01" max={today}
+            onChange={(e) => { setCustomFrom(e.target.value); if (ISO_DAY.test(e.target.value)) remember('bo2_util_from', e.target.value) }} style={{ width: 150, height: 34 }} />}
+          <Seg value={grain} onChange={pickGrain} options={[{ value: 'day', label: 'Daily' }, { value: 'week', label: 'Weekly' }, { value: 'month', label: 'Monthly' }]} />
+        </div>
+      </div>
+      {hist.error && hist.error !== MP_OUTDATED && <div className="card" style={{ padding: '12px 16px', color: hist.error === MP_CANCELLED ? C.muted : C.bad, fontSize: 13 }}>{hist.error === MP_CANCELLED ? 'History query cancelled.' : `History didn't load: ${hist.error}`} <button className="btn small" onClick={hist.refresh}>Run again</button></div>}
+
+      <Card delay={320}>
+        <div className="between" style={{ alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+          <div><h2 className="h2">Spend by reward type</h2><div className="caption" style={{ marginTop: 4 }}>Per {grain} · dotted end = still running (to date)</div></div>
+          {hist.rows && (
+            <div className="row" style={{ gap: 22, flexWrap: 'wrap' }}>
+              <div><div className="caption">Spent in range</div><div className="mono" style={{ fontSize: 18, fontWeight: 600 }}>{money(histTotal.spent)}</div></div>
+              <div><div className="caption">Budget in range</div><div className="mono" style={{ fontSize: 18, fontWeight: 600, color: histTotal.budgetDays ? C.text : C.faint }}>{histTotal.budgetDays ? money(histTotal.budget) : '—'}</div>
+                {histTotal.budgetDays > 0 && histTotal.budgetDays < histTotal.days && <div className="caption">{histTotal.budgetDays} of {histTotal.days} days have one</div>}</div>
+              {hasPrizes && KINDS.filter((k) => k !== 'mp').map((k) => (
+                <div key={k}><div className="caption">{KIND_LABEL[k]}</div><div className="mono" style={{ fontSize: 18, fontWeight: 600 }}>{money(histTotal.kinds[k])}</div></div>
+              ))}
+            </div>
+          )}
+        </div>
+        {hist.rows
+          ? <SpendLines data={series} grain={grain} stale={hist.stale} hasPrizes={hasPrizes} />
+          : <div className="caption" style={{ height: 200, display: 'grid', placeItems: 'center' }}>{hist.loading ? 'Loading history…' : 'No history yet.'}</div>}
+      </Card>
+
+      <Card pad={false} delay={340} style={{ overflowX: 'auto' }}>
+        <div style={{ padding: '16px 18px 12px' }}>
+          <h2 className="h2">Spend vs. budget · {grain === 'day' ? 'by day' : grain === 'week' ? 'by week' : 'by month'}</h2>
+          <div className="caption" style={{ marginTop: 4 }}>
+            {grain === 'month'
+              ? 'Set a past month\'s budget here (Edit). A monthly budget carries on to the next months until one has its own; a half-month override still wins.'
+              : 'Budget = each period\'s budget ÷ its days. Switch to Monthly to set budgets for past months.'}
+          </div>
+        </div>
+        <div style={{ minWidth: 1000, opacity: hist.stale ? 0.45 : 1 }}>
+          <div className="thead" style={{ gridTemplateColumns: TGRID }}>
+            <span>{grain === 'day' ? 'Day' : grain === 'week' ? 'Week' : 'Month'}</span><span>Spent</span><span>Budget</span><span>Utilization</span>
+            {KINDS.map((k) => <span key={k} className="row" style={{ gap: 6 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: KIND_COLOR[k] }} />{KIND_LABEL[k]}</span>)}
+            <span>Units</span>
+          </div>
+          <div style={{ maxHeight: 460, overflowY: 'auto' }}>
             {table.map((b) => (
-              <div key={b.key} className="trow" style={{ gridTemplateColumns: TGRID, height: 40 }}>
-                <span>{b.label}{b.partial && <span className="caption"> · to date</span>}</span>
-                <span className="mono">{daily.rows ? money(b.spent) : '—'}</span>
-                <span className="mono" style={{ color: b.budget === null ? C.faint : C.muted }}>{b.budget === null ? 'no budget' : money(b.budget)}</span>
-                {b.utilization !== null && daily.rows ? (grain === 'day' && b.partial ? <UtilBar value={b.utilization * 100} dim /> : <BudgetBar value={b.utilization * 100} />) : <span className="caption">—</span>}
-                <span className="mono" style={{ color: C.muted }}>{daily.rows ? b.units.toLocaleString('en-US') : '—'}</span>
+              <div key={b.key} className="trow" style={{ gridTemplateColumns: TGRID, minHeight: 40 }}>
+                <span>{b.label}{b.partial && <span className="caption">{b.cutStart ? ` · from ${dayLabel(histFrom)}` : ' · to date'}</span>}</span>
+                <span className="mono">{hist.rows ? money(b.spent) : '—'}</span>
+                {grain === 'month'
+                  ? <MonthBudget b={b} periods={periods} canEdit={canEdit} onSave={(n) => saveMonth(b.key, n)} />
+                  : <span className="mono" style={{ color: b.budget === null ? C.faint : C.muted }}>{b.budget === null ? 'no budget' : money(b.budget)}</span>}
+                {b.utilization !== null && hist.rows ? (b.partial ? <UtilBar value={b.utilization * 100} dim /> : <BudgetBar value={b.utilization * 100} />) : <span className="caption">—</span>}
+                {KINDS.map((k) => <span key={k} className="mono" style={{ color: b.kinds[k] ? C.muted : C.faint }}>{!hist.rows || (k !== 'mp' && !hasPrizes) ? '—' : money(b.kinds[k])}</span>)}
+                <span className="mono" style={{ color: C.muted }}>{hist.rows ? b.units.toLocaleString('en-US') : '—'}</span>
               </div>
             ))}
           </div>
@@ -206,7 +284,38 @@ export default function Utilization() {
     </>
   )
 }
-const TGRID = '1.4fr 1fr 1fr 1.4fr 0.7fr'
+const TGRID = '1.5fr 0.9fr 1.25fr 1.3fr 0.9fr 0.8fr 0.8fr 0.8fr 0.6fr'
+
+/** A month's budget in the history table: where it comes from, and an inline editor for that month's standing budget. */
+function MonthBudget({ b, periods, canEdit, onSave }: { b: Bucket; periods: BudgetPeriod[]; canEdit: boolean; onSave: (n: number) => void }) {
+  const [editing, setEditing] = useState(false)
+  const own = periods.find((p) => p.id === monthlyId(b.key) && p.amountUSD > 0)
+  const carried = own ? undefined : monthlyFor(periods, b.key)
+  const halves = periods.some((p) => (p.id === `${b.key}-A` || p.id === `${b.key}-B`) && p.amountUSD > 0)
+  const [val, setVal] = useState(own ? String(own.amountUSD) : '')
+  const n = parseUSD(val)
+  if (editing) {
+    return (
+      <form className="row" style={{ gap: 6, padding: '4px 0' }} onSubmit={(e) => { e.preventDefault(); if (okUSD(n)) { onSave(n); setEditing(false) } }}>
+        <input className="input mono" autoFocus inputMode="decimal" aria-label={`Monthly budget for ${b.label} in USD`} value={val} onChange={(e) => setVal(e.target.value)}
+          placeholder="0" style={{ width: 92, height: 30, padding: '0 8px', borderColor: okUSD(n) ? undefined : C.bad }} />
+        <button className="btn primary small" type="submit" disabled={!okUSD(n)} style={{ height: 30 }}>Save</button>
+        <button className="btn small" type="button" onClick={() => setEditing(false)} style={{ height: 30 }} aria-label="Cancel">✕</button>
+      </form>
+    )
+  }
+  const src = own || carried
+  const note = src ? `${money(src.amountUSD)}/mo · ${own ? 'set here' : `from ${monthLabel(src.id.slice(2))}`}${b.partial ? ' · shown to date' : ''}` : ''
+  return (
+    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.25 }}>
+        <span className="mono" style={{ color: b.budget === null ? C.faint : C.muted }}>{b.budget === null ? 'no budget' : money(b.budget)}</span>
+        {(note || halves) && <span className="caption" style={{ fontSize: 11 }}>{[note, halves && 'has override'].filter(Boolean).join(' · ')}</span>}
+      </span>
+      {canEdit && <button className="btn small" style={{ height: 22, padding: '0 8px' }} onClick={() => { setVal(own ? String(own.amountUSD) : ''); setEditing(true) }}>{own ? 'Edit' : 'Set'}</button>}
+    </span>
+  )
+}
 
 /** Like UtilBar, but spending past the budget (over 105%) is a problem too, not "great". */
 function BudgetBar({ value }: { value: number }) {
@@ -303,7 +412,7 @@ function BudgetBox({ pid, info, canEdit, onSaveMonthly, onSavePeriod, planOpened
 /** Where the period's money went: marketplace vs. Buff Pass / raffle / other prizes from internal stock. */
 function RewardsCard({ totals, prizes, budget, hasPrizes }: { totals: Record<Kind, number>; prizes: PrizeLine[]; budget: number | null; hasPrizes: boolean }) {
   const all = KINDS.reduce((a, k) => a + totals[k], 0)
-  const COL: Record<Kind, string> = { mp: C.lime, buffpass: C.sky, raffle: C.violet, other: C.orange }
+  const COL = KIND_COLOR
   const unpriced = prizes.filter((p) => p.source === 'none')
   return (
     <Card delay={300}>

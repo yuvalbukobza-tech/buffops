@@ -251,11 +251,15 @@ export interface Bucket {
   /** Days counted (up to today). */
   days: number
   spent: number; units: number
+  /** Spend split by reward kind (sums to `spent`). */
+  kinds: Record<Kind, number>
   /** Budget for the counted days; null when a counted day has no budget. */
   budget: number | null
   utilization: number | null
   /** The bucket includes today or is cut by the window (numbers are to date). */
   partial: boolean
+  /** The window starts after the bucket does (its first days are not counted). */
+  cutStart: boolean
 }
 
 const mondayOf = (d: string) => addDays(d, -((new Date(toUTC(d)).getUTCDay() + 6) % 7))
@@ -271,12 +275,15 @@ export function buckets(grain: Grain, from: string, to: string, today: string, b
       const start = grain === 'month' ? `${key}-01` : key
       const end = grain === 'day' ? key : grain === 'week' ? addDays(key, 6) : monthEnd(key)
       const label = grain === 'day' ? dayLabel(d) : grain === 'week' ? `${dayLabel(key)} – ${dayLabel(end)}` : monthLabel(key)
-      b = { key, label, start, end, days: 0, spent: 0, units: 0, budget: 0, utilization: null, partial: end > last || end >= today }
+      b = {
+        key, label, start, end, days: 0, spent: 0, units: 0, kinds: { mp: 0, buffpass: 0, raffle: 0, other: 0 },
+        budget: 0, utilization: null, partial: end > last || end >= today || start < from, cutStart: start < from,
+      }
       map.set(key, b)
     }
     b.days++
     const s = byDay.get(d)
-    if (s) { b.spent += s.usd; b.units += s.units }
+    if (s) { b.spent += s.usd; b.units += s.units; for (const k of KINDS) b.kinds[k] += s.kinds[k] }
     const db = dailyBudget(d, periods)
     b.budget = b.budget === null || db === null ? null : b.budget + db
   }

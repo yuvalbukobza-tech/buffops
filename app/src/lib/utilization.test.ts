@@ -190,6 +190,15 @@ describe('buckets', () => {
     expect(w.map((b) => b.start)).toEqual(['2026-10-26', '2026-11-02', '2026-11-09'])
     expect(w[1]).toMatchObject({ days: 7, spent: 14, units: 7, budget: 700, partial: false })
     expect(w[2]).toMatchObject({ days: 3, partial: true })
+    expect(w[0]).toMatchObject({ days: 1, partial: true, cutStart: true }) // window starts on Sunday
+    expect(w[1].kinds).toEqual({ mp: 14, buffpass: 0, raffle: 0, other: 0 })
+  })
+  it('splits each bucket by reward kind', () => {
+    const rows = [row('2026-11-02', 'x', 3), { ...row('2026-11-02', '$50 Steam - buffpass', 1), source: 'INTERNAL_STORAGE' }, { ...row('2026-11-03', '$10 Riot - Raffle', 2), source: 'INTERNAL_STORAGE' }]
+    const [m] = buckets('month', '2026-11-01', '2026-11-30', '2026-11-11', spendByDay(rows, flat), periods)
+    expect(m.kinds).toEqual({ mp: 6, buffpass: 2, raffle: 4, other: 0 })
+    expect(m.spent).toBe(12)
+    expect(m.cutStart).toBe(false)
   })
   it('budget is unknown when any counted day has none', () => {
     const w = buckets('week', '2026-10-12', '2026-10-25', '2026-11-11', new Map(), periods)
