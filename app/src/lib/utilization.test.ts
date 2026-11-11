@@ -193,6 +193,15 @@ describe('buckets', () => {
     expect(w[0]).toMatchObject({ days: 1, partial: true, cutStart: true }) // window starts on Sunday
     expect(w[1].kinds).toEqual({ mp: 14, buffpass: 0, raffle: 0, other: 0 })
   })
+  it('old Buff Pass names (plain $50 Steam / Amazon before May 2026) count as Buff Pass', () => {
+    const i = (day: string, name: string) => ({ day, source: 'INTERNAL_STORAGE', product_name: name })
+    expect(kindOf(i('2026-01-15', '$50 Steam'))).toBe('buffpass')
+    expect(kindOf(i('2026-02-01', '$50  Amazon Gift Card '))).toBe('buffpass')
+    expect(kindOf(i('2026-06-01', '$50 Steam'))).toBe('other') // a later card with that name is not assumed
+    expect(kindOf(i('2026-01-15', '$50 Steam Gift Card - Marvel'))).toBe('other')
+    expect(kindOf(i('2026-01-15', '$10 Steam'))).toBe('other')
+    expect(kindOf({ ...i('2026-01-15', '$50 Steam'), source: 'EXTERNAL_MARKETPLACE' })).toBe('mp')
+  })
   it('splits each bucket by reward kind', () => {
     const rows = [row('2026-11-02', 'x', 3), { ...row('2026-11-02', '$50 Steam - buffpass', 1), source: 'INTERNAL_STORAGE' }, { ...row('2026-11-03', '$10 Riot - Raffle', 2), source: 'INTERNAL_STORAGE' }]
     const [m] = buckets('month', '2026-11-01', '2026-11-30', '2026-11-11', spendByDay(rows, flat), periods)

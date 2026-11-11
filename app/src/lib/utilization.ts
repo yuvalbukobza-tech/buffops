@@ -140,13 +140,22 @@ export const KIND_LABEL: Record<Kind, string> = { mp: 'Marketplace', buffpass: '
 export const isInternal = (r: Pick<MpDailyRow, 'source'>) => r.source === 'INTERNAL_STORAGE'
 
 /**
+ * Until April 2026 Buff Pass prizes had no "- buffpass" in the name: plain "$50 Steam" / "$50 Amazon Gift Card"
+ * from internal stock (they stop exactly when the suffixed names start). Confirmed by Yuval 2026-11-11.
+ * Limited to days before May 2026 so a future card with that name isn't counted as Buff Pass by accident.
+ */
+export const LEGACY_BUFFPASS_UNTIL = '2026-05-01'
+export const isLegacyBuffPass = (name: string, day?: string) =>
+  !!day && String(day).slice(0, 10) < LEGACY_BUFFPASS_UNTIL && /^\$50 (steam|amazon gift card)$/i.test(name.trim().replace(/\s+/g, ' '))
+
+/**
  * Marketplace purchases are 'mp'; internal-stock prizes by their BuffOps product purpose, else by name,
  * else 'raffle' when the name is a prize of a raffle (rafflePrizes = normalized prize names from the Raffles Service).
  */
-export function kindOf(r: Pick<MpDailyRow, 'source' | 'product_name'>, purpose?: string, rafflePrizes?: Set<string>): Kind {
+export function kindOf(r: Pick<MpDailyRow, 'source' | 'product_name'> & { day?: string }, purpose?: string, rafflePrizes?: Set<string>): Kind {
   if (!isInternal(r)) return 'mp'
   const n = r.product_name || ''
-  if (purpose === 'Buff Pass' || /buff\s*pass/i.test(n)) return 'buffpass'
+  if (purpose === 'Buff Pass' || /buff\s*pass/i.test(n) || isLegacyBuffPass(n, r.day)) return 'buffpass'
   if (purpose === 'Raffles' || /raffle/i.test(n) || rafflePrizes?.has(norm(n))) return 'raffle'
   return 'other'
 }
