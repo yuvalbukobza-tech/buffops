@@ -1,5 +1,5 @@
 // Backend access (Google Apps Script). Same endpoint and key as BuffOps v1.
-import { STATE_KEYS, type AppState, type Receipt, type RedashRow } from './types'
+import { OPTIONAL_KEYS, STATE_KEYS, type AppState, type MpDailyRow, type MpStockRow, type Receipt, type RedashRow } from './types'
 
 const LIVE_URL = 'https://script.google.com/macros/s/AKfycbyDJ6nUT5l3Y7R95oi--vp9QM-VZ1urwB64-pMbCPdgyVArgDzQTOiMFvz-ZpWDXADy/exec'
 export const API_URL: string = import.meta.env.VITE_API_URL || LIVE_URL
@@ -41,7 +41,14 @@ export async function loadState(): Promise<AppState> {
   const data = await getJson(`${API_URL}?key=${APP_KEY}`)
   const bad = validateState(data)
   if (bad) throw new Error(`Invalid data from server: ${bad}`)
-  return data as AppState
+  return normalizeState(data as Record<string, unknown>)
+}
+
+/** Optional collections that older data doesn't have become empty lists. */
+export function normalizeState(d: Record<string, unknown>): AppState {
+  const s = { ...d } as Record<string, unknown>
+  for (const k of OPTIONAL_KEYS) if (!Array.isArray(s[k])) s[k] = []
+  return s as unknown as AppState
 }
 
 export function counts(s: AppState) {
@@ -62,6 +69,8 @@ export async function saveState(s: AppState): Promise<void> {
   if (!WRITE_ENABLED) throw new Error('Saving is disabled in preview mode')
   const body: Record<string, unknown> = {}
   for (const k of STATE_KEYS) body[k] = s[k]
+  // A backend older than v8 drops these silently — the Utilization screen locks budget editing until v8 is live.
+  for (const k of OPTIONAL_KEYS) body[k] = s[k]
   await fetch(`${API_URL}?key=${APP_KEY}`, { method: 'POST', mode: 'no-cors', body: JSON.stringify(body) })
 }
 
@@ -71,22 +80,55 @@ export async function saveState(s: AppState): Promise<void> {
  * redashCancel(ctl.job) also stops the run inside Redash.
  */
 export async function fetchRedash(from: string, to: string, ctl: PullControl = { cancelled: false }, onProgress?: (state: string, seconds: number) => void): Promise<RedashRow[]> {
-  type Reply = { rows?: RedashRow[]; error?: string; pending?: boolean; job?: string; state?: string }
+  const d = await runRedash<RedashRow>(`${API_URL}?action=redash&async=1&from=${from}&to=${to}&key=${APP_KEY}`, ctl, onProgress, 4000)
+  return d.rows || []
+}
+
+type JobReply<R> = { rows?: R[]; error?: string; pending?: boolean; job?: string; state?: string }
+
+/** Starts a backend Redash run and polls ?action=redashJob until it has rows (or fails / is cancelled). */
+async function runRedash<R>(startUrl: string, ctl: PullControl, onProgress: ((state: string, seconds: number) => void) | undefined, everyMs: number): Promise<JobReply<R>> {
   const t0 = Date.now()
-  let d = (await getJson(`${API_URL}?action=redash&async=1&from=${from}&to=${to}&key=${APP_KEY}`, 2)) as Reply
+  let d = (await getJson(startUrl, 2)) as JobReply<R>
   while (d.pending && d.job) {
     ctl.job = d.job
     if (ctl.cancelled) throw new PullCancelled()
     const waited = Math.round((Date.now() - t0) / 1000)
     onProgress?.(d.state || 'queued', waited)
     if (waited > 15 * 60) throw new Error('Redash has been running for 15 minutes — try again later')
-    await new Promise((r) => setTimeout(r, 4000))
+    await new Promise((r) => setTimeout(r, everyMs))
     if (ctl.cancelled) throw new PullCancelled()
-    d = (await getJson(`${API_URL}?action=redashJob&job=${encodeURIComponent(d.job)}&key=${APP_KEY}`, 3)) as Reply
+    d = (await getJson(`${API_URL}?action=redashJob&job=${encodeURIComponent(d.job)}&key=${APP_KEY}`, 3)) as JobReply<R>
   }
   if (ctl.cancelled) throw new PullCancelled()
   if (d.error) throw new Error(d.error)
-  return d.rows || []
+  return d
+}
+
+/** The live backend is older than v8 (it answers unknown actions with the whole state). */
+export class BackendOutdated extends Error { constructor() { super('The Google backend needs the v8 update (Code-v8-mp-utilization.gs)') } }
+
+/** Backend version: 8+ answers ?action=version; older ones return the state instead → 0. */
+export async function backendVersion(): Promise<number> {
+  const d = (await getJson(`${API_URL}?action=version&key=${APP_KEY}`, 2)) as { version?: unknown }
+  return typeof d.version === 'number' ? d.version : 0
+}
+
+/** Marketplace purchases per day (backend v8). `to` is exclusive. */
+export async function fetchMpDaily(from: string, to: string, ctl: PullControl = { cancelled: false }, onProgress?: (state: string, seconds: number) => void): Promise<MpDailyRow[]> {
+  return mpq<MpDailyRow>(`q=mpdaily&from=${from}&to=${to}`, ctl, onProgress)
+}
+
+/** Live stock and demand per active item (backend v8). */
+export async function fetchMpStock(ctl: PullControl = { cancelled: false }, onProgress?: (state: string, seconds: number) => void): Promise<MpStockRow[]> {
+  return mpq<MpStockRow>('q=mpstock', ctl, onProgress)
+}
+
+async function mpq<R>(params: string, ctl: PullControl, onProgress?: (state: string, seconds: number) => void): Promise<R[]> {
+  const d = await runRedash<R>(`${API_URL}?action=mpq&${params}&key=${APP_KEY}`, ctl, onProgress, 3000)
+  // An older backend has no "mpq": it falls through to the default and returns the whole state.
+  if (!Array.isArray(d.rows)) throw new BackendOutdated()
+  return d.rows
 }
 
 /** Stops a BuffOps run inside Redash (sales or Fulfillment) so it stops loading the database. */

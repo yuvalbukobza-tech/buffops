@@ -3,11 +3,13 @@ import { Seg } from '../ui/kit'
 import Finance, { type FinancePrefill } from './budget/Finance'
 import Overview from './budget/Overview'
 import PlanVsActual from './budget/PlanVsActual'
+import Utilization from './budget/Utilization'
 import VendorOrders from './budget/VendorOrders'
 
-type Sub = 'overview' | 'actual' | 'orders' | 'finance'
+type Sub = 'overview' | 'util' | 'actual' | 'orders' | 'finance'
 const SUBS: { value: Sub; label: string; title: string; sub: string }[] = [
   { value: 'overview', label: 'Overview', title: 'Budget', sub: 'What each vendor needs per month, and what it is for' },
+  { value: 'util', label: 'Utilization', title: 'Marketplace utilization', sub: 'The 15-day budget against what users really bought — day by day' },
   { value: 'actual', label: 'Planned vs actual', title: 'Planned vs actual', sub: 'Did each vendor spend what we planned?' },
   { value: 'orders', label: 'Vendor orders', title: 'Vendor orders', sub: 'Build a code order or a money transfer for the next 15 days' },
   { value: 'finance', label: 'Finance requests', title: 'Finance requests', sub: 'Transfers requested from finance, month by month' },
@@ -29,6 +31,7 @@ export default function Budget() {
       </div>
       <div key={sub} style={{ display: 'contents' }}>
         {sub === 'overview' && <Overview requestTransfer={requestTransfer} />}
+        {sub === 'util' && <Utilization />}
         {sub === 'actual' && <PlanVsActual />}
         {sub === 'orders' && <VendorOrders requestTransfer={requestTransfer} />}
         {sub === 'finance' && <Finance key={formVersion} prefill={prefill} clearPrefill={() => setPrefill(null)} />}

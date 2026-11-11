@@ -107,6 +107,18 @@ export interface VendorOrder {
   createdAt?: string
 }
 
+/**
+ * v2 (backend v8+): the marketplace budget for one half-month, entered by hand.
+ * id is "YYYY-MM-A" (1st–15th) or "YYYY-MM-B" (16th–end of month).
+ */
+export interface BudgetPeriod {
+  id: string
+  amountUSD: number
+  note?: string
+  updatedAt?: string
+  updatedBy?: string
+}
+
 export interface AppState {
   products: Product[]
   allocs: Allocs
@@ -116,9 +128,34 @@ export interface AppState {
   raffles: Raffle[]
   raffleCountries: Record<string, number[]>
   budgetExtras: BudgetExtra[]
+  /** Optional on the server (older data has none); always an array after loadState. */
+  budgetPeriods: BudgetPeriod[]
 }
 
-export const STATE_KEYS: (keyof AppState)[] = ['products', 'allocs', 'orders', 'transactions', 'appUsers', 'raffles', 'raffleCountries', 'budgetExtras']
+/** Required collections — loading fails if one is missing. */
+export const STATE_KEYS = ['products', 'allocs', 'orders', 'transactions', 'appUsers', 'raffles', 'raffleCountries', 'budgetExtras'] as const satisfies readonly (keyof AppState)[]
+/** Saved like the others, but older data may not have them (defaulted on load). The server keeps them only from backend v8. */
+export const OPTIONAL_KEYS = ['budgetPeriods'] as const satisfies readonly (keyof AppState)[]
+
+/** Marketplace gift cards bought per day per product (backend v8, ?action=mpq&q=mpdaily). */
+export interface MpDailyRow {
+  day: string
+  product_name: string | null
+  tier: string | null
+  purchases: number
+}
+
+/** Live stock and demand per active item (backend v8, ?action=mpq&q=mpstock). */
+export interface MpStockRow {
+  product_name: string | null
+  tier: string | null
+  daily_restocks: number | null
+  purchased_today: number | null
+  out_of_stock: boolean | null
+  p14: number | null
+  p30: number | null
+  last_purchase: string | null
+}
 
 export interface RedashRow {
   country: string | null
